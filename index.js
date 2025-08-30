@@ -69,6 +69,7 @@ async function deleteRole(req,res) {
     }
 }
 
+
 // 5.3  Create User
 async function createUser(req,res) {
     try{
@@ -101,13 +102,13 @@ async function getAllUsers(req,res) {
 }
 
 // 5.3 Input Address
-async function inputAddress(req,res) {
+async function createAddress(req,res) {
     try {
-        const {street,city,state,zip_code,country} = req.body;
-        if( !street || !city || !state || !zip_code || !country) {
+        const {address_line1,address_line2,postcode,state,country} = req.body;
+        if( !address_line1) {
             return res.status(400).send('Missing required fields');
         }
-        const [InputAddress] = await pool.query('INSERT INTO addresses (user_id,street,city,state,zip_code,country) VALUES (?,?,?,?,?,?)', [user_id,street,city,state,zip_code,country]);
+        const [InputAddress] = await pool.query('INSERT INTO address (address_line1,address_line2,postcode,states,country) VALUES (?,?,?,?,?)', [address_line1,address_line2,postcode,state,country]);
         res.status(201).json({
             Message: 'Address added successfully', 
             addressId: InputAddress.insertId
@@ -119,6 +120,64 @@ async function inputAddress(req,res) {
     }
 }
 
+//5.4 Delete Address
+async function deleteAddress(req,res){
+    try{
+        const{id} = req.params;
+        const[deleteAddress] = await pool.query('DELETE FROM address WHERE address_id = ?', [id]);
+        if(deleteAddress.affectedRows === 0){
+            return res.status(404).json({Message: 'Address not found'});
+        }
+        res.status(200).json({Message: 'Address deleted successfully'});
+    }
+    catch(error){
+        console.log("ERROR Deleting Address:",error);
+        res.status(500).send('Error Deleting data from the database');
+    }
+}
+
+//5.5 Update Address
+async function updateAddress(req,res){
+    try{
+        const{id}=req.params;
+        const{address_line1, address_line2,postcode, states, country} = req.body;
+        if(!address_line1 && !address_line2 && !postcode && !states && !country){
+            return res.status(400).send('At least one field is required to update');
+        }
+        const fieldaddress =[];
+        const valueaddress =[];
+        if(address_line1){
+            fieldaddress.push('address_line1 = ?');
+            valueaddress.push(address_line1);
+        }
+        if(address_line2){
+            fieldaddress.push('address_line2 = ?');
+            valueaddress.push(address_line2);
+        }
+        if(postcode){
+            fieldaddress.push('postcode = ?');
+            valueaddress.push(postcode);
+        }
+        if(states){
+            fieldaddress.push('states = ?');
+            valueaddress.push(states);
+        }
+        if(country){
+            fieldaddress.push('country = ?');
+            valueaddress.push(country);
+        }
+        valueaddress.push(id);
+        const[uptAddress] = await pool.query(`UPDATE address SET ${fieldaddress.join(', ')} WHERE address_id = ?`, valueaddress);
+        if(uptAddress.affectedRows === 0){
+            return res.status(404).json({Message : 'Address not found'});
+        }
+    }
+    catch(error){
+        console.error("ERROR Updating Address:",error);
+        res.status(500).send('Error Updating data in the database');
+    }
+};
+
 // 6. API  ROUTES
 app.get('/', (req,res) => {
     res.send('Node.js and MYSQL API is running');
@@ -128,10 +187,12 @@ app.post('/roles', createRoles);
 app.delete('/roles/:id', deleteRole);
 app.post('/users', createUser);
 app.get('/users', getAllUsers);
-
+app.get('/addresses', createAddress);
+app.delete('/addresses/:id', deleteAddress);
+app.put('/addresses/:id', updateAddress);
 
 //7. RUN
 app.listen(3000,()=>{
-    console.log('Server is running on port ${port}`')
+    console.log(`Server is running on port ${port}`)
 });
 
