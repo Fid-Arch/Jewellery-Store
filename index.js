@@ -59,7 +59,7 @@ async function deleteRole(req,res) {
         const { id } = req.params;
         const [deleteRole] = await pool.query('DELETE FROM roles WHERE roles_id = ?', [id]);
         if(deleteRole.affectedRows === 0) {
-            return res.status(404).json({Message: 'Role not found'});
+            return res.status(400).json({Message: 'Role not found'});
         }
         res.status(200).json({Message: 'Role deleted successfully'});
     }
@@ -67,7 +67,7 @@ async function deleteRole(req,res) {
         console.error("ERROR Deleting Role:", error);
         res.status(500).send('Error Deleting data from the database');
     }
-}
+};
 
 
 // 5.3  Create User
@@ -99,7 +99,7 @@ async function getAllUsers(req,res) {
         console.error("ERROR Fetching Users:", error);
         res.status(500).send('Error Fetching data from the database');
     }
-}
+};
 
 // 5.3 Input Address
 async function createAddress(req,res) {
@@ -118,7 +118,7 @@ async function createAddress(req,res) {
         console.error("ERROR Adding Address:", error);
         res.status(500).send('Error Inserting data into the database');
     }
-}
+};
 
 //5.4 Delete Address
 async function deleteAddress(req,res){
@@ -140,44 +140,66 @@ async function deleteAddress(req,res){
 async function updateAddress(req,res){
     try{
         const{id}=req.params;
-        const{address_line1, address_line2,postcode, states, country} = req.body;
-        if(!address_line1 && !address_line2 && !postcode && !states && !country){
-            return res.status(400).send('At least one field is required to update');
+        const fieldaddress = req.body;
+        if(Object.keys(fieldaddress).length === 0){
+            return res.status(400).send('No fields to update');
         }
-        const fieldaddress =[];
-        const valueaddress =[];
-        if(address_line1){
-            fieldaddress.push('address_line1 = ?');
-            valueaddress.push(address_line1);
-        }
-        if(address_line2){
-            fieldaddress.push('address_line2 = ?');
-            valueaddress.push(address_line2);
-        }
-        if(postcode){
-            fieldaddress.push('postcode = ?');
-            valueaddress.push(postcode);
-        }
-        if(states){
-            fieldaddress.push('states = ?');
-            valueaddress.push(states);
-        }
-        if(country){
-            fieldaddress.push('country = ?');
-            valueaddress.push(country);
-        }
-        valueaddress.push(id);
-        const[uptAddress] = await pool.query(`UPDATE address SET ${fieldaddress.join(', ')} WHERE address_id = ?`, valueaddress);
+        const[uptAddress] = await pool.query(`UPDATE address SET ? WHERE address_id = ?`, [fieldaddress,id]);
+
         if(uptAddress.affectedRows === 0){
-            return res.status(404).json({Message : 'Address not found'});
+            res.status(404).json({Message: `Address ID ${id} update failed`})
+        }
+        else{
+            res.status(200).json({Message: `Address ID ${id} updated successfully`});
         }
     }
     catch(error){
-        console.error("ERROR Updating Address:",error);
+        console.error('ERROR Updating Address:',error);
         res.status(500).send('Error Updating data in the database');
     }
 };
 
+//5.6 Linking User and Address
+async function userAddress (req,res){
+    try{
+        const {user_id} = req.params;
+        const {address_id} = req.body;
+
+        if(!address_id){
+            return res.status(400).send('Address ID is required');
+        }
+        const[result] = await pool.query('INSERT INTO user_address {user_id,address_id} VALUES (?,?)', [user_id,address_id]);
+        res.status(201).json({
+            Message: 'Address linked to user successfully',
+            linkId: result.insertId
+        });
+    }
+    catch(error){
+        console.error('ERRPR Linking Address to USER:', error);
+        res.status(500).send('Error Linking Address to User in the database');
+    }
+};
+
+//5.7 Create Product
+async function createProduct(req,res){
+    try{
+        const {product_name, product_description, price} = req.body;
+
+        if(!product_name){
+            return res.status(400).json({Message: 'Missing required fields'});
+        }
+        const[product] = await pool.query('INSERT INTO products (product_name, product_description) VALUES (?,?)', [product_name, product_description]);
+        res.status(201).json({
+            Message: 'Product created successfully',
+            productId: product.insertId
+        });
+    }
+    catch(error){
+        console.error('ERROR Creating Product:', error);
+        res.status(500).send('Error Inserting data into the database');
+    }
+};
+    
 // 6. API  ROUTES
 app.get('/', (req,res) => {
     res.send('Node.js and MYSQL API is running');
