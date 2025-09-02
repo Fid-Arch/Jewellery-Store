@@ -168,14 +168,14 @@ async function userAddress (req,res){
         if(!address_id){
             return res.status(400).send('Address ID is required');
         }
-        const[result] = await pool.query('INSERT INTO user_address {user_id,address_id} VALUES (?,?)', [user_id,address_id]);
+        const[linked] = await pool.query('INSERT INTO user_address {user_id,address_id} VALUES (?,?)', [user_id,address_id]);
         res.status(201).json({
             Message: 'Address linked to user successfully',
-            linkId: result.insertId
+            linkId: linked.insertId
         });
     }
     catch(error){
-        console.error('ERRPR Linking Address to USER:', error);
+        console.error('ERROR Linking Address to USER:', error);
         res.status(500).send('Error Linking Address to User in the database');
     }
 };
@@ -199,7 +199,49 @@ async function createProduct(req,res){
         res.status(500).send('Error Inserting data into the database');
     }
 };
-    
+
+//5.8 prodcut Item
+async function createProductItem(req,res){
+    try{
+        const {productID} = req.params;
+        const {sku,qty,price} = req.body;
+        
+        if(!sku||!qty||!price){
+            return res.status(400).json({Error: 'Missing required fields'});
+        }
+        const[item]= await pool.query('INSERT INTO product_items (product_id,sku,qty,price) VALUES (?,?,?,?)', [productID,sku,qty,price]);
+        res.status(201).json({
+            Message: 'Product Item created successfully',
+            itemID: item.insertID
+        });
+    }
+    catch(error){
+        console.error('ERROR Creating Product Item:', error);
+        res.status(500).json({Error: 'Error Inserting data into the database'});
+    }
+};
+
+// Create Variation
+async function createVariation(req,res){
+    try{
+        const {type} = req.body;
+        if(!type){
+            return res.json(400).json({Message: 'Missing required fields'});
+        }
+        const[variation] = await pool.query('INSERT INTO variations (type) VALUES (?)', [type]);
+        res.status(201).json({
+            Message: 'Variation created successfully',
+            variationId: variation.insertId
+        }); 
+    }
+    catch(error){
+        console.error('ERROR Creating Variation:', error);
+        res.status(500).json({Error:'Error Inserting data into the database'});
+    }
+};
+// Create Variation Options
+
+
 // 6. API  ROUTES
 app.get('/', (req,res) => {
     res.send('Node.js and MYSQL API is running');
