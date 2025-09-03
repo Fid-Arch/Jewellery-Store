@@ -69,7 +69,6 @@ async function deleteRole(req,res) {
     }
 };
 
-
 // 5.3  Create User
 async function createUser(req,res) {
     try{
@@ -239,8 +238,135 @@ async function createVariation(req,res){
         res.status(500).json({Error:'Error Inserting data into the database'});
     }
 };
-// Create Variation Options
 
+// Create Variation Options
+async function createVariationOptions(req,res){
+    try{
+        const {variationID} = req.params;
+        const {option_value} = req.body;
+        if(!option_value){
+            return res.status(400).json({Message: 'Missing required fields'});
+        }
+        const [option] = await pool.query('INSERT INTO variation_options (variation_id,option_value) VALUES (?,?)', [variationID, option_value]);
+        res.status(201).json({
+            Message: 'Variation Option created successfully',
+            optionID: option.insertID
+        });
+    }
+    catch(error){
+        console.error('ERROR Creating Variation Option:', error);
+        res.status(500).json({Error:'Error Inserting data into the database'});
+    }
+};
+
+// Product Configuration
+async function productConfiguration(req,res){
+    try{
+        const {productItemID} = req.params;
+        const {variationOptionID}= req.body;
+
+        if(!variationOptionID){
+            return res.status(400).json({Message: 'Missing required fields'});
+        }
+        const [config]= await pool.query('INSERT INTO product_configurations (product_item_id,variation_option_id) VALUES (?,?)', [productItemID, variationOptionID]);
+        res.status(201).json({ Message: 'Product Configuration created successfully'})
+    }
+    catch(error){
+        console.error('ERROR Creating Product Configuration:', error);
+        res.status(500).json({Error:'Error Inserting data into the database'});
+    }
+};
+
+// Product Variation
+async function productVariation(req,res){
+    try{
+        const {productID} = req.params;
+        const {variationID} = req.body;
+
+        if(!variationID){
+            return res.status(400).json({MEssage: 'Missing required fields'});
+        }
+        const[prodVar] = await pool.query('INSERT INTO product_variations (product_id,variation_id) VALUES (?,?)', [productID, variationID]);
+        res.status(201).json({Message: 'Product Variation created successfully'});
+    }
+    catch(error){
+        console.error('ERROR Creating Product Variation:', error);
+        res.status(500).json({Error:'Error Inserting data into the datebase'})
+    }
+};
+
+// Create Category
+async function createCategory(req,res){
+    try{
+        const { name, parent_category_id } = req.body;
+        if(!name){
+            return res.status(400).json({Message: 'Missing required fields'});
+        }
+        const[category] = await pool.query('INSERT INTO categories (name,parent_category_id) VALUES (?,?)', [name,parent_category_id]);
+        res.status(201).json({
+            Message: 'Category created successfully',
+            categoryId: category.insertId
+        });
+    }
+    catch(error){
+        console.error('ERROR Creating Category:', error);
+        res.status(500).json({Error:'Error Inserting data into the database'});
+    }
+};
+
+//Create Supplier
+async function createSupplier(req,res){
+    try{
+        const { name,contact_info } = req.body;
+        if(!name){
+            return res.status(400).json({Message: 'Missing required fields'});
+        }
+        const[supplier] = await pool.query('INSERT INTO suppliers (name,contact_info) VALUES (?,?)', [name,contact_info]);
+        res.status(201).json({
+            Message: 'Supplier created successfully',
+            supplierId: supplier.insertId
+        });
+    }
+    catch(error){
+        console.error('ERROR Creating Supplier:',error);
+        res.status(500).json({Error:'Error Inserting data into the database'});
+    }
+};
+
+// Create Order
+async function createOrder(req,res){
+    let connection;
+    try{
+        const {user_id, total_amount, shipping_method, shipping_address, items} = req.body
+
+        if(!user_id || !total_amount || !shipping_method || !shipping_address || !items || items.length === 0){
+            return res.status(400).json({Message: 'Missing required fields'});
+        }
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+
+        const[order] = await connection.query('INSERT INTO orders (user_id,total_amount,shipping_method,shipping_address) VALUES (?,?,?,?)', [user_id,total_amount,shipping_method,shipping_address]);
+        const orderId = order.insertId;
+        const[orderLines] = await Promise.all(items.map(item => {
+            return connection.query('INSERT INTO order_lines (order_id,product_item_id,quantity,price) VALUES (?,?,?,?)', [orderId,item.product_item_id,item.quantity,item.price]);
+        }));   
+        await connection.commit();
+        res.status(201).json({
+            Message: 'Order created successfully',
+            orderId: orderId
+        });
+    }
+    catch(error){
+        if(connection){
+            await connection.rollback();
+            console.error('ERROR Creating Order:', error);
+            res.status(500).json({Error:'Error Inserting data into the database'});
+        }
+    }
+    finally{
+        if(connection) connection.release();
+    }
+};
 
 // 6. API  ROUTES
 app.get('/', (req,res) => {
