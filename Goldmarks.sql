@@ -192,8 +192,9 @@ CREATE TABLE refund(
 -- CART
 CREATE TABLE cart(
     cart_id INT PRIMARY KEY AUTO_INCREMENT,
-    user_id INT,
-    FOREIGN KEY (user_id) REFERENCES users(user_id)
+    user_id INT NULL,
+    session_id VARCHAR(255) UNIQUE NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
 CREATE TABLE cart_items(

@@ -333,27 +333,135 @@ async function createSupplier(req,res){
     }
 };
 
+//Add item to cart
+async function addItemToCart(req,res){
+    try{
+        const user_id = req.user.user_id;
+        const{product_item_id,quantity} = req.body;
+        
+        if(!product_item_id || !quantity){
+            return res.status(400).json({Message: 'Missing required fields'});
+        }
+        const [carts] = await pool.query('SELECT * FROM cart WHERE user_id = ?', [user_id]);
+        let cart_id;
+
+        if(carts.length === 0){
+            const[newCart] = await pool.query('INSERT INTO cart (user_id) = ?', [user_id]);
+        }
+        else{
+            cart_id = carts[0].cart_id;
+        }
+
+        const[existingItem] = await pool.query('SELECT * FROM cart_items WHERE cart_id = ? AND product_item_id = ?', [cart_id, product_item_id]);
+        if(existingItem.length === 0){
+            await pool.query('INSERT INTO cart_items (cart_id, product_item_id, quantity) VALUES (?,?,?)', [cart_id, product_item_id,quantity]);
+            res.status(201).json({Message: 'Item added to cart successfully'});
+        }
+        else{
+            const newQuantity = existingItem[0].quantity + quantity;
+            await pool.query('UPDATE cart_items SET quantity = ? WHERE cart_item_id = ?', [newQuantity, existingItem[0].cart.item_id]);
+            res.status(200).json({Message: 'Cart Item quantity updated successfully'});
+        }
+    }
+    catch(error){
+        console.error('ERROR Adding Item to Cart:', error);
+        res.status(500).json({Error:'Error Inserting data into the database'});
+    }
+};
+
+// Payment Using Stripe
+async function processPayment(req,res){
+    try{
+        const user_id = req.user.user_id;
+
+        const [carts] = await pool.query('SELECT cart_id FROM carts WHERE user_id = ?', [user_id]);
+        if(carts.length === 0){
+            return res.status(404).json({Message: 'No Active Cart Found for the User'});
+        }
+        const cart_id = carts[0].cart_id;
+        const get_items = `
+        SELECT SUM(ci.quantity * pi.price) AS total_amount
+        FROM cart_items ci
+        JOIN product_items pi ON ci.product_item_id = pi.product_item_id
+        WHERE ci.cart_id = ?
+        `;
+        const [totals] = await pool.query(get.items, [cart_id]);
+        const total_amount = totals[0].total_amount || 0;
+
+        if (total_amount <= 0){
+            return res.status(400).json({Message: 'Cart is empty'});
+        }
+
+        //integrating with stripe
+        const paymentIntent = await stripe.paymentIntents.create({
+            amount: Math.round(total_amount * 100), 
+            currency: 'aud',
+            automatic_payment_methods: {enabled: true},
+        });
+        res.status(200).json({
+            Message: 'Payment Intent Created Successfully',
+            clientSecret: paymentIntent.client_secret,
+        });
+    }
+    catch(error){
+        console.error('ERROR Processing Payment:', error);
+        res.status(500).json({Error: 'Error Processing Payment'});
+    }
+};
+
 // Create Order
 async function createOrder(req,res){
     let connection;
     try{
-        const {user_id, total_amount, shipping_method, shipping_address, items} = req.body
+        const user_id = req.user.user_id;
+        const {shipping_method, shipping_address, process_payment_id} = req.body;
 
-        if(!user_id || !total_amount || !shipping_method || !shipping_address || !items || items.length === 0){
+        if(!shipping_method || !shipping_address || !process_payment_id === 0){
             return res.status(400).json({Message: 'Missing required fields'});
         }
         connection = await pool.getConnection();
         await connection.beginTransaction();
 
-        const[order] = await connection.query('INSERT INTO orders (user_id,total_amount,shipping_method,shipping_address) VALUES (?,?,?,?)', [user_id,total_amount,shipping_method,shipping_address]);
-        const orderId = order.insertId;
-        const[orderLines] = await Promise.all(items.map(item => {
-            return connection.query('INSERT INTO order_lines (order_id,product_item_id,quantity,price) VALUES (?,?,?,?)', [orderId,item.product_item_id,item.quantity,item.price]);
-        }));   
+        const [carts] = await connection.query('SELECT * FROM carts WHERE user_id = ?', [user_id]);
+        if(carts.length === 0){
+            await connection.rollback();
+            return res.status(404).json({Message: 'No active cart found for the user'});
+        }
+        const cart_id = carts[0].cart_id;
+        const get_items = `
+        SELECT ci.product_item_id, ci.quantity, pi.price
+        FROM cart_items ci
+        JOIN product_items pi ON ci.product_item_id = pi.product_item_id
+        WHERE ci.cart_id = ?
+        `;
+        const [items] = await connection.query(get_items, [cart_id]);
+
+        if(items.length === 0){
+            await connection.rollback();
+            return res.status(400).json({Message: 'Cart is Empty'});
+        }   
+        const total_amount = items.reduce((total, item) => total + (item.price * item.quantity), 0);
+
+        const order = 'INSERT INTO shop_orders (user_id, total_amount, shipping_method, shipping_address, transaction_id, payment_status, order_status) VALUES (?,?,?,?,?,?,?)';
+        const orderValues = [user_id, total_amount, shipping_method, shipping_address, process_payment_id, 'Pending', 1];
+        const [orderResult] = await connection.query(order, orderValues);
+        const shop_order_id = orderResult.insertId;
+        //Record payment
+        const payment = 'INSERT INTO payments (shop_order_id, amount, payment_method, payment_status,transaction_id) VALUES (?,?,?,?,?)';
+        await connection.query(payment, [shop_order_id, total_amount, 'Stripe', 'Pending', process_payment_id]);
+        
+        //Record into the orderline
+        const orderline = 'INSERT INTO order_lines (shop_order_id, product_item_id, quantity, price) VALUES (?,?,?,?)';
+        const orderlinevalues = items.map(item => { shop_order_id, item.product_item_id, item.quantity, item.price});
+        await connection.query(orderline, [orderlinevalues]);
+
+        const deleteCartItems = 'DELETE FROM cart_items WHERE cart_id = ?';
+        await connection.query(deleteCartItems, [cart_id]);
+
         await connection.commit();
         res.status(201).json({
-            Message: 'Order created successfully',
-            orderId: orderId
+            Message: 'Order Created Successfully',
+            shop_order_id: shop_order_id
         });
     }
     catch(error){
@@ -368,6 +476,66 @@ async function createOrder(req,res){
     }
 };
 
+async function stripeWebhook(req,res){
+    const sig = req.headers['stripe-signature'];
+    let event;
+
+    try{
+        event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    }
+    catch(error){
+        console.error(`ERROR Verifying Stripe Webhook: ${error.message}`);
+        return res.status(400).send(`Webhook Error: ${error.message}`);
+    }
+    if(event.type === 'payment_intent.succeeded'){
+        const paymentIntent = event.data.object;
+        console.log('Payment Intent Succeeded:', paymentIntent.id);
+        await handlesuccessfulPayment(paymentIntent);
+        }
+        res.sendStatus(200);
+    }
+
+async function SuccessfulPayment(paymentIntent){
+    let connection;
+    try{
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+
+        const updateOrder = 'UPDATE shop_orders SET payment_status = "Paid", order_status = ? WHERE transaction_id = ?';
+        await connection.query(updateOrder, [2,paymentIntent.id])
+
+        const updatePayment = 'UPDATE payments SET payment_status = "Paid" WHERE transaction_id = ?';
+        await connection.query(updatePayment, [paymentIntent.id]);
+
+        const getCart = `
+        SELECT c.cart_id FROM carts c
+        JOIN users u ON c.user_id = u.user_id
+        JOIN shop_orders so ON u.user_id = so.user_id
+        WHERE so.transaction_id = ?
+        `;
+
+        const [carts] = await connection.query(getCart, [paymentIntent.id]);
+        if(carts.length > 0){
+            const cart_id = carts[0].cart_id;
+            const deleteCartItems = 'DELETE FROM cart_items WHERE cart_id = ?';
+            await connection.query(deleteCartItems, [cart_id]);
+        }
+        await connection.commit();
+        console.log(`Order and Payment records updated for Transaction ID: ${paymentIntent.id}`);
+        }
+    catch(error){
+        if(connection){
+            await connection.rollback();
+            console.error('ERROR Handling Successful Payment:', error);
+        }
+    }
+    finally{
+        if(connection) connection.release();
+    }       
+};
+
+//Get User Orders
+
 // 6. API  ROUTES
 app.get('/', (req,res) => {
     res.send('Node.js and MYSQL API is running');
@@ -380,6 +548,7 @@ app.get('/users', getAllUsers);
 app.get('/addresses', createAddress);
 app.delete('/addresses/:id', deleteAddress);
 app.put('/addresses/:id', updateAddress);
+
 
 //7. RUN
 app.listen(3000,()=>{
