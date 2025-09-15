@@ -2,6 +2,7 @@
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
+// const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // 2. Initialize Express APP
 const app = express();
@@ -34,7 +35,7 @@ pool.getConnection()
     });
 
 // 5. API
-//5.1 Create Roles
+// Create Roles
 async function createRoles(req,res) {
     try{
         const { role_name } = req.body;
@@ -53,7 +54,7 @@ async function createRoles(req,res) {
     }
 };
 
-//5.2 Delete Role
+//Delete Role
 async function deleteRole(req,res) {
     try{
         const { id } = req.params;
@@ -69,17 +70,29 @@ async function deleteRole(req,res) {
     }
 };
 
-// 5.3  Create User
-async function createUser(req,res) {
-    try{
-        const { firstName, email, password_hash } = req.body;
-        if(!firstName || !email || !password_hash) {
-            return res.status(400).send('Missing required fields');
+// Register User
+async function registerUser(req,res) {
+    try {
+        const { firstName, lastName, email, password } = req.body;
+        if(!firstName || !lastName || !email || !password) {
+            return res.status(400).json({Message: 'Missing required fields'});
         }
-        const [InputUser] = await pool.query('INSERT INTO users (firstName,email,password_hash) VALUES (?,?,?)', [firstName, email, password_hash]);
+        const [existingUser] = await pool.query('SELECT user_id FROM users WHERE email = ?', [email]);
+        if (existingUser.length > 0) {
+            return res.status(400).json({Message: 'User already exists'});
+        }
+        const password_hash = password + '_hashed'; // In production, hash the password before storing
+
+        const [newUser] = await pool.query('INSERT INTO users (firstName,lastName,email,password_hash) VALUES (?,?,?,?)', [firstName, lastName, email, password_hash]);
         res.status(201).json({
-            Message: 'User created successfully', 
-            userId: InputUser.insertId
+            Message: 'User created successfully',
+            userId: newUser.insertId,
+            user: {
+                id: newUser.insertId,
+                firstName,
+                lastName,
+                email,
+            }
         });
     }
     catch(error) {
@@ -88,7 +101,42 @@ async function createUser(req,res) {
     }
 };
 
-// 5.3 Get All Users
+// User Login
+async function loginUser(req,res) {
+    try {
+        const {email,password} = req.body
+
+        if(!email || !password) {
+            return res.status(400).json({Message: 'Email and Password are required'});
+        }
+        const [users] = await pool.query('SELECT user_id, firstName, lastName, email, password_hash FROM users WHERE email = ?', [email]);
+        if (users.length === 0) {
+            return res.status(401).json({Message: 'Invalid Email or Password'});
+        }
+        const user = users[0];
+        if (user.password_hash !== password + '_hashed') {
+            return res.status(401).json({Message: 'Invalid Email or Password'});
+        }
+        const sessionToken = 'session_token_placeholder'; // In production, generate a secure token
+        res.status(200).json({
+            Message: 'Login successful',
+            token: sessionToken,
+            user: {
+                id: user.user_id,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                email: user.email,
+                role: user.role_id
+            }
+        });
+    }
+    catch(error) {
+        console.error("ERROR logging in User:", error);
+        res.status(500).send('Error logging in the user');
+    }
+};
+
+// Get All Users
 async function getAllUsers(req,res) {
     try {
         const [users] = await pool.query('SELECT * FROM users');
@@ -99,8 +147,42 @@ async function getAllUsers(req,res) {
         res.status(500).send('Error Fetching data from the database');
     }
 };
+// Get User Profile
+async function getUserProfile(req,res) {
+    try {
+        const {id} = req.params;
+        const [users] = await pool.query(
+            `SELECT u.user_id, u.firstName, u.lastName, u.email, u.phoneNumber, 
+                    u.createdAt, r.role_name 
+             FROM users u 
+             LEFT JOIN roles r ON u.roles_id = r.roles_id 
+             WHERE u.user_id = ?`, 
+            [id]
+        );
 
-// 5.3 Input Address
+        if (users.length === 0) {
+            return res.status(404).json({ Message: 'User not found'});
+        }
+
+        const user = users[0];
+        res.status(200).json({
+            user: {
+                id: user.user_id,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                email: user.email,
+                phoneNumber: user.phoneNumber,
+                role: user.role_name,
+                memberSince: user.createdAt
+            }
+        });
+    } catch (error) {
+        console.error('ERROR Fetching User Profile:', error);
+        res.status(500).json({ Message: 'Error fetching user profile' });
+    }
+};
+
+//Input Address
 async function createAddress(req,res) {
     try {
         const {address_line1,address_line2,postcode,state,country} = req.body;
@@ -119,7 +201,7 @@ async function createAddress(req,res) {
     }
 };
 
-//5.4 Delete Address
+//Delete Address
 async function deleteAddress(req,res){
     try{
         const{id} = req.params;
@@ -135,7 +217,7 @@ async function deleteAddress(req,res){
     }
 }
 
-//5.5 Update Address
+//Update Address
 async function updateAddress(req,res){
     try{
         const{id}=req.params;
@@ -158,7 +240,7 @@ async function updateAddress(req,res){
     }
 };
 
-//5.6 Linking User and Address
+// Linking User and Address
 async function userAddress (req,res){
     try{
         const {user_id} = req.params;
@@ -167,7 +249,7 @@ async function userAddress (req,res){
         if(!address_id){
             return res.status(400).send('Address ID is required');
         }
-        const[linked] = await pool.query('INSERT INTO user_address {user_id,address_id} VALUES (?,?)', [user_id,address_id]);
+        const[linked] = await pool.query('INSERT INTO user_address (user_id,address_id) VALUES (?,?)', [user_id,address_id]);
         res.status(201).json({
             Message: 'Address linked to user successfully',
             linkId: linked.insertId
@@ -179,7 +261,7 @@ async function userAddress (req,res){
     }
 };
 
-//5.7 Create Product
+//Create Product
 async function createProduct(req,res){
     try{
         const {product_name, product_description, price} = req.body;
@@ -199,7 +281,128 @@ async function createProduct(req,res){
     }
 };
 
-//5.8 prodcut Item
+// // Get All Products with pagination
+async function getAllProducts(req,res){
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page-1)*limit;
+
+        const [results] = await pool.query('SELECT COUNT(*) as total FROM products');
+        const totalProducts = results[0].total;
+
+        const [products] = await pool.query(`
+            SELECT p.product_id, p.product_name, p.description,p.product_image, p.is_featured, p.created_at, p.updated_at, c.name as category_name, s.name as supplier_name
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.category_id
+            LEFT JOIN suppliers s ON p.supplier_id = s.supplier_id
+            ORDER BY p.created_at DESC
+            LIMIT ? OFFSET ?`, [limit, offset]);
+            
+        res.status(200).json({
+            data: {
+                products,
+                pagination: {
+                    currentPage: page,
+                    totalPages: Math.ceil(totalProducts / limit),
+                    totalItems: totalProducts,
+                    hasNextPage: page < Math.ceil(totalProducts / limit),
+                    hasPrevPage: page > 1
+                }
+            }
+        });
+    }
+    catch(error){
+        console.error('ERROR Fetching Products:', error);
+        res.status(500).json({Error: 'Error Fetching data from the database'});
+    }
+};
+
+// Get Product by ID
+async function getProductById(req,res){
+    try{
+        const {id} = req.params;
+        const[products] = await pool.query(`
+            SELECT p.product_id, p.product_name, p.product_description, p.product_image, p.is_featured, p.created_at, p.updated_at, c.name as category_name, s.name as supplier_name
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.category_id
+            LEFT JOIN suppliers s ON p.supplier_id = s.supplier_id
+            WHERE p.product_id = ?`, [id]);
+
+        if(products.length === 0){
+            return res.status(404).json({Message: 'Product not found'});
+        }
+
+        const [productItems] = await pool.query(`
+            SELECT product_item_id, sku, qty_in_stock, product_image, price
+            FROM product_items
+            WHERE product_id = ?`, [id]);
+
+        const [variations] = await pool.query(`
+            SELECT v.variation_id, v.name, vo.variation_option_id, vo.value
+            FROM product_variations pv
+            JOIN variations v ON pv.variation_id = v.variation_id
+            LEFT JOIN variation_options vo ON v.variation_id = vo.variation_id
+            WHERE pv.product_id = ?`, [id]);
+
+        const product = {...products[0], items: productItems, variations: variations};
+        res.status(200).json({data: product});
+    }
+    catch(error){
+        console.error('ERROR Fetching Product by ID:', error);
+        res.status(500).json({Error: 'Error Fetching data from the database'});
+    }
+};
+
+//Update Product
+async function updateProduct(req,res){
+    try{
+        const{id} = req.params;
+        const updateFields = req.body;
+
+        if(Object.keys(updateFields).length === 0){
+            return res.status(400).json({Message: 'No fields to update'});
+        }
+
+        const allowedFields = ['product_name','description','product_image','is_featured','category_id','supplier_id'];
+        const validFields = {};
+
+        Object.keys(updateFields).forEach(key => {
+            if(allowedFields.includes(key)){
+                validFields[key] = updateFields[key];
+            }
+        });
+        const[result] = await pool.query('UPDATE products SET ? WHERE product_id = ?', [validFields,id]);
+
+        if(result.affectedRows === 0){
+            return res.status(404).json({Message: 'Product not found or no changes made'});
+        }
+    }
+    catch(error){
+        console.error('ERROR Updating Product:', error);
+        res.status(500).json({Error: 'Error Updating data in the database'});
+    }
+};
+
+// Delete Product
+async function deleteProduct(req,res){
+    try{
+        const{id} = req.params;
+        const[product] = await pool.query('SELECT product_id FROM products WHERE product_id = ?', [id]);
+
+        if(product.lenth === 0){
+            return res.status(404).json({Message: 'Product not found'});
+        };
+        await pool.query('DELETE FROM products WHERE product_id = ?', [id]);
+        res.status(200).json({Message: 'Product deleted successfully'});
+    }
+    catch(error){
+        console.error('ERROR Deleting Product:', error);
+        res.status(500).json({Error: 'Error Deleting data from the database'});
+    }
+};
+
+// Create Product Item
 async function createProductItem(req,res){
     try{
         const {productID} = req.params;
@@ -211,7 +414,7 @@ async function createProductItem(req,res){
         const[item]= await pool.query('INSERT INTO product_items (product_id,sku,qty,price) VALUES (?,?,?,?)', [productID,sku,qty,price]);
         res.status(201).json({
             Message: 'Product Item created successfully',
-            itemID: item.insertID
+            itemID: item.insertId
         });
     }
     catch(error){
@@ -314,6 +517,23 @@ async function createCategory(req,res){
     }
 };
 
+//Create All Categories
+async function getAllCategories(req,res){
+    try{
+        const [categories] = await pool.query(`
+            SELECT c1.category_id, c1.name, c1.parent_categories_id, c2.name as parent_name
+            FROM categories c1
+            LEFT JOIN categories c2 ON c1.parent_category_id = c2.category_id
+            ORDER BY c1.name`);
+
+            res.status(200).json({data: categories});
+    }
+    catch(error){
+        console.error('ERROR Fetching Categories:', error);
+        res.status(500).json({Error:'Error Fetching data from the database'});
+    }
+};
+
 //Create Supplier
 async function createSupplier(req,res){
     try{
@@ -346,7 +566,8 @@ async function addItemToCart(req,res){
         let cart_id;
 
         if(carts.length === 0){
-            const[newCart] = await pool.query('INSERT INTO cart (user_id) = ?', [user_id]);
+            const[newCart] = await pool.query('INSERT INTO cart (user_id) VALUES (?)', [user_id]);
+            cart_id = newCart.insertId;
         }
         else{
             cart_id = carts[0].cart_id;
@@ -359,7 +580,7 @@ async function addItemToCart(req,res){
         }
         else{
             const newQuantity = existingItem[0].quantity + quantity;
-            await pool.query('UPDATE cart_items SET quantity = ? WHERE cart_item_id = ?', [newQuantity, existingItem[0].cart.item_id]);
+            await pool.query('UPDATE cart_items SET quantity = ? WHERE cart_item_id = ?', [newQuantity, existingItem[0].carts_item_id]);
             res.status(200).json({Message: 'Cart Item quantity updated successfully'});
         }
     }
@@ -447,12 +668,12 @@ async function createOrder(req,res){
         const [orderResult] = await connection.query(order, orderValues);
         const shop_order_id = orderResult.insertId;
         //Record payment
-        const payment = 'INSERT INTO payments (shop_order_id, amount, payment_method, payment_status,transaction_id) VALUES (?,?,?,?,?)';
+        const payment = 'INSERT INTO payment (shop_order_id, amount, payment_method, payment_status,transaction_id) VALUES (?,?,?,?,?)';
         await connection.query(payment, [shop_order_id, total_amount, 'Stripe', 'Pending', process_payment_id]);
         
         //Record into the orderline
-        const orderline = 'INSERT INTO order_lines (shop_order_id, product_item_id, quantity, price) VALUES (?,?,?,?)';
-        const orderlinevalues = items.map(item => { shop_order_id, item.product_item_id, item.quantity, item.price});
+        const orderline = 'INSERT INTO order_line (shop_order_id, product_item_id, quantity, price) VALUES (?,?,?,?)';
+        const orderlinevalues = items.map(item => [shop_order_id, item.product_item_id, item.quantity, item.price]);
         await connection.query(orderline, [orderlinevalues]);
 
         const deleteCartItems = 'DELETE FROM cart_items WHERE cart_id = ?';
@@ -543,11 +764,13 @@ app.get('/', (req,res) => {
 
 app.post('/roles', createRoles);
 app.delete('/roles/:id', deleteRole);
-app.post('/users', createUser);
 app.get('/users', getAllUsers);
-app.get('/addresses', createAddress);
+app.post('/addresses', createAddress);
 app.delete('/addresses/:id', deleteAddress);
 app.put('/addresses/:id', updateAddress);
+app.post('/auth/register', registerUser);
+app.post('/auth/login', loginUser);
+app.get('/users/:id', getUserProfile);
 
 
 //7. RUN
