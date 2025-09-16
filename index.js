@@ -521,16 +521,39 @@ async function createCategory(req,res){
 async function getAllCategories(req,res){
     try{
         const [categories] = await pool.query(`
-            SELECT c1.category_id, c1.name, c1.parent_categories_id, c2.name as parent_name
+            SELECT c1.category_id, c1.name, c1.parent_categories_id, c2.name as parent_categories_id
             FROM categories c1
             LEFT JOIN categories c2 ON c1.parent_category_id = c2.category_id
             ORDER BY c1.name`);
 
-            res.status(200).json({data: categories});
+            res.status(200).json({Data: categories});
     }
     catch(error){
         console.error('ERROR Fetching Categories:', error);
         res.status(500).json({Error:'Error Fetching data from the database'});
+    }
+};
+
+//Get Product by Category
+async function getProductByCategory(req,res){
+    try{
+        const {categoryId} = req.params;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page-1)*limit;
+
+        const [products] = await pool.query(`
+            SELECT p.product_id, p.productname, p.description, p.product_image, p.is_featured, c.name as category_name
+            FROM products p
+            JOIN categories c ON p.category_id = c.category_id
+            WHERE p.category_id = ?
+            ORDER BY p.created_at DESC
+            LIMIT ? OFFSET ?`, [categoryId, limit, offset]);
+        res.status(200).json({Data: products});
+    }
+    catch(error){
+        console.error('ERROR Fetching Products by Category:', error);
+        res.status(500).json({Error:'Error Fetching Products by Category from the database'});
     }
 };
 
@@ -587,6 +610,100 @@ async function addItemToCart(req,res){
     catch(error){
         console.error('ERROR Adding Item to Cart:', error);
         res.status(500).json({Error:'Error Inserting data into the database'});
+    }
+};
+
+//Get User Cart
+async function getUserCart(req,res){
+    try{
+        const user_id = req.user.user_id;
+
+        let [carts] = await pool.query('SELECT cart_id FROM carts WHERE user_id = ?', [user_id]);
+        if(carts.length === 0){
+            const [newCart] = await pool.query('INSERT INTO carts (user_id) VALUES (?)', [user_id]);
+            const cart_id = newCart.insertId;
+            return res.status(200).json({
+                Data:{
+                    cart_id,
+                    items: [],
+                    total_amount: 0
+                },
+                Message: 'New cart created for the user'
+            });
+        }
+
+        const cart_id = carts[0].cart_id;
+        const [cartItems] = await pool.query(`
+            SELECT  ci.cart_item_id, ci.qty, ci.product_item_id, pi.price, pi.sku, pi.product_image, p.productname, p.description
+            FROM cart_items ci
+            JOIN product_items pi ON ci.product_item_id = pi.product_item_id
+            JOIN products p ON pi.product_id = p.product_id
+            WHERE ci.cart_id = ?`, [cart_id]);
+
+        const total_amount = cartItems.reduce((total, item) => total + (item.price * item.qty), 0);
+        res.status(200).json({Data: cart_id, items: cartItems, total: total_amount.toFixed(2), itemCount: cartItems.length});
+    }
+    catch(error){
+        console.error('ERROR Fetching User Cart:', error);
+        res.status(500).json({Error:'Error Fetching User Cart from the database'});
+    }
+};
+
+//Update Cart Item
+async function updateCartItem(req,res){
+    try{
+        const {cartItemId} = req.params;
+        const {qty} = req.body;
+
+        if (!qty || qty < 1){
+            return res.status(400).json({Message: 'Quantity must be at least 1'});
+        }
+        const[updateItem] = await pool.query('UPDATE cart_items SET qty = ? WHERE cart_item_id = ?', [qty, cartItemId]);
+
+        if(updateItem.affectedRows === 0){
+            return res.status(404).json({Message: 'Cart Item not found or no changes made'});
+        }
+    }
+    catch(error){
+        console.error('ERROR Updating Cart Item:', error);
+        res.status(500).json({Error:'Error Updating Cart Item in the database'});
+    }
+};
+
+//Remove Cart Item
+async function removeCartItem(req,res){
+    try{
+        const {cartItemId} = req.params;
+        const[deleteItem] = await pool.query('DELETE FROM cart_items WHERE cart_item_id = ?', [cartItemId]);
+
+        if(deleteItem.affectedRows === 0){
+            return res.status(404).json({Message: 'Cart Item not found'});
+        }
+        res.status(200).json({Message: 'Cart Item removed successfully'});
+    }
+    catch(error){
+        console.error('ERROR Removing Cart Item:', error);
+        res.status(500).json({Error:'Error Removing Cart Item from the database'});
+    }
+};
+
+// Clear Cart
+async function clearCart(req,res){
+    try{
+        const user_id = req.user.user_id;
+        const[carts] = await pool.query('SELECT cart_id FROM carts WHERE user_id = ?', [user_id]);
+        if(carts.length === 0){
+            return res.status(404).json({Message: 'No Active Cart Found for the User'});
+        }
+
+        const cart_id = carts[0].cart_id;
+        await pool.query('DELETE FROM cart_items WHERE cart_id = ?', [cart_id]);
+
+        res.status(200).json({Message: 'Cart Cleared Successfully'});
+    }
+    catch(error){
+        console.error('ERROR Clearing Cart:', error);
+        res.status(500).json({Error:'Error Clearing Cart from the database'});
     }
 };
 
@@ -714,7 +831,7 @@ async function stripeWebhook(req,res){
         await handlesuccessfulPayment(paymentIntent);
         }
         res.sendStatus(200);
-    }
+    };
 
 async function SuccessfulPayment(paymentIntent){
     let connection;
@@ -756,7 +873,186 @@ async function SuccessfulPayment(paymentIntent){
 };
 
 //Get User Orders
+async function getUserOrders(req,res){
+    try{
+        const user_id = req.user.user_id;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page-1)*limit;
 
+        const [orders] = await pool.query(`
+            SELECT so.shop_order_id, so.order_date, so.order_total, so.payment_status, os.status as order_status, sm.name as shipping_method,
+            FROM shop_orders so
+            JOIN order_status os ON so.order_status = os.status_id
+            JOIN shipping_methods sm ON so.shipping_method = sm.shipping_method_id
+            WHERE so.user_id = ?
+            ORDER BY so.order_date DESC
+            LIMIT ? OFFSET ?`, [user_id, limit, offset]);
+        
+        res.status(200).json({Data: orders});
+    }
+    catch (error){
+        console.error('ERROR Fetching User Orders:', error);
+        res.status(500).json({Error:'Error Fetching User Orders from the database'});
+    }
+};
+
+//Get Order Details
+async function getOrderById(req,res){
+    try{
+        const user_id = req.user.user_id;
+        const {orderId} = req.params;
+
+        const [orders] = await pool.query(`
+            SELECT 
+                so.shop_order_id, so.order_date, so.order_total, so.payment_status, 
+                os.status as order_status, sm.name as shipping_method, sm.price as shipping_cost,
+                a.address_line1, a.address_line2, a.postcode, a.states, a.country
+            FROM shop_orders so
+            JOIN order_status os ON so.order_status = os.status_id
+            JOIN shipping_methods sm ON so.shipping_method = sm.shipping_method_id
+            JOIN address a ON so.shipping_address = a.address_id
+            WHERE so.user_id = ? AND so.shop_order_id = ?`, [user_id, orderId]);
+
+        if(orders.length === 0){
+            return res.status(404).json({Message: 'Order not found'});
+        }
+        const [orderItems] = await pool.query(`
+            SELECT ol.qty, ol.price, pi.sku, p.product_image, p.productname, p.description
+            FROM order_line ol
+            JOIN product_items pi ON ol.product_item_id = pi.product_item_id
+            JOIN products p ON pi.product_id = p.product_id
+            WHERE ol.shop_order_id = ?`, [orderId]);
+
+        const orderDetails = {...orders[0], items: orderItems};
+
+        res.status(200).json({Order: orderDetails});
+    }
+    catch(error){
+        console.error('ERROR Fetching Order Details:', error);
+        res.status(500).json({Error:'Error Fetching Order Details'});
+    }
+};
+
+// Update Order Status (Admin only)
+async function updateOrderStatus(req,res){
+    try{
+        const {orderId} = req.params;
+        const {statusId} = req.body;
+
+        if(!statusId){
+            return res.status(400).json({Message: 'Status ID is required'});
+        }
+        const [updateStatus] = await pool.query('UPDATE shop_orders SET order_status_id = ? WHERE shop_order_id = ?', [statusId, orderId]);
+        if(updateStatus.affectedRows === 0){
+            return res.status(404).json({Message: 'Order not found'});
+        }
+        res.status(200).json({Message: 'Order status updated successfully'});
+    }
+    catch(error){
+        console.error('ERROR Updating Order Status:', error);
+        res.status(500).json({Error:'Error Updating Order Status'});
+    }
+};
+
+//Search Products
+async function searchProducts(req,res){
+    try{
+        const {
+            query='',category,MinPrice, MaxPrice, featured, page = 1, limit = 12, sortBy = 'created_at', sortOrder = 'desc' 
+        } = req.query;
+        const offset = (page - 1) * limit;
+
+        let whereConditions = [];
+        let queryParams = [];
+
+        if(query){
+            whereConditions.push('(p.productname LIKE ? OR p.description LIKE ?)');
+            queryParams.push(`%${query}%`, `%${query}%`);
+        }
+
+        if(category){
+            whereConditions.push('c.category_id = ?');
+            queryParams.push(category);
+        }
+
+        if(MinPrice||MaxPrice){
+            if(MinPrice){
+                whereConditions.push('pi.price >= ?');
+                queryParams.push(parseFloat(MinPrice));
+            }
+            if(MaxPrice){
+                whereConditions.push('pi.price <= ?');
+                queryParams.push(parseFloat(MaxPrice));
+            }
+        }
+        if(featured !== undefined){
+            whereConditions.push('p.is_featured = ?');
+            queryParams.push(featured === 'true' ? 1 : 0);
+        }
+
+        const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
+
+        const validSortColumns = ['created_at', 'productname', 'price'];
+        const validSortOrder = ['ASC', 'DESC'];
+
+        const finalSortBy = validSortColumns.includes(sortBy) ? sortBy : 'created_at';
+        const finalSortOrder = validSortOrder.includes(sortOrder.toUpperCase()) ? sortOrder.toUpperCase() : 'DESC';
+
+        const searchQuery = `
+            SELECT p.product_id, p.productname, p.description, p.product_image, p.is_featured, p.created_at, 
+                c.name as category_name,
+                MIN(pi.price) as min_price,
+                MAX(pi.price) as max_price,
+                COUNT(DISTINCT pi.product_item_id) as variants_count
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.category_id
+            LEFT JOIN product_items pi ON p.product_id = pi.product_id
+            ${whereClause}
+            GROUP BY p.product_id
+            ORDER BY ${finalSortBy} ${finalSortOrder}
+            LIMIT ? OFFSET ?`;
+            
+        queryParams.push(parseInt(limit), parseInt(offset));
+
+        const [products] = await pool.query(searchQuery, queryParams);
+
+        const countQuery = `
+            SELECT COUNT(DISTINCT p.product_id) as total
+            FROM products p
+            LEFT JOIN product_items pi ON p.product_id = pi.product_id
+            ${whereClause}`;
+
+        const [countResult] = await pool.query(countQuery, queryParams.slice(0, -2));
+        const totalProducts = countResult[0].total;
+
+        res.status(200).json({
+            data: {
+                products,
+                pagination: {
+                    currentPage: parseInt(page),
+                    totalPages: Math.ceil(totalProducts / limit),
+                    totalProducts,
+                    hasNextPage: page < Math.ceil(totalProducts / limit),
+                    hasPrevPage: page > 1
+                },
+                appliedFilters: {
+                    query,
+                    category,
+                    MinPrice,
+                    MaxPrice,
+                    featured,
+                    sortBy: finalSortBy,
+                    sortOrder: finalSortOrder
+                }
+            }
+        });
+    }
+    catch(error){
+        console.error('ERROR Searching Products:', error);
+        res.status(500).json({Error:'Error Searching Products'});
+    }
+};
 // 6. API  ROUTES
 app.get('/', (req,res) => {
     res.send('Node.js and MYSQL API is running');
@@ -771,6 +1067,16 @@ app.put('/addresses/:id', updateAddress);
 app.post('/auth/register', registerUser);
 app.post('/auth/login', loginUser);
 app.get('/users/:id', getUserProfile);
+
+// Product routes
+app.get('/products', getAllProducts);
+app.get('/products/:id', getProductById);
+app.put('/products/:id', updateProduct);
+app.delete('/products/:id', deleteProduct);
+
+// Category routes
+app.get('/categories', getAllCategories);
+app.get('/categories/:categoryId/products', getProductsByCategory);
 
 
 //7. RUN
