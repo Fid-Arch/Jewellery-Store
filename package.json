@@ -10,7 +10,12 @@
     "dependencies": {
         "express": "^5.1",
         "mysql2": "^3.14",
-        "cors": "^2.8.5"
+        "cors": "^2.8.5",
+        "jsonwebtoken": "^9.0.2",
+        "bcrypt": "^5.0.1",
+        "dotenv": "^16.3.1",
+        "stripe": "^14.9.0"
+
     },
     "devDependencies": {
         "nodemon": "^3.1.10"

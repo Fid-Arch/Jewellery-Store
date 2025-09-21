@@ -2,7 +2,9 @@
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
-// const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // 2. Initialize Express APP
 const app = express();
@@ -33,6 +35,71 @@ pool.getConnection()
     .catch(err => {
         console.error('Database connection failed:', err);
     });
+
+// Generate JWT Token
+function generateToken(userId, role = 'user'){
+    return jwt.sign(
+        {userId, role},
+        process.env.JWT_SECRET || 'your_jwt_secret_key',
+        {expiresIn: process.env.JWT_EXPIRES_IN || '24h'}
+    );
+};
+
+// Middleware to authenticate JWT
+function authenticateJWT(req,res,next) {
+    try{
+        const authHeader = req.headers.authorization;
+        const token = authHeader && authHeader.split(' ')[1];
+        if(!token) {
+            return res.status(401).json({Message: 'Missing Authorization Token'});
+        }
+
+        jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+            if (err) {
+                return res.status(403).json({Message: 'Invalid Token'});
+            }
+            req.user = {
+                user_id : decoded.user_id,
+                role: decoded.role
+            };
+            next();
+        });
+    }
+    catch(error){
+        console.error('ERROR Authenticating JWT:', error);
+        res.status(500).json({Message: 'Error Authenticating JWT'});
+    }
+};
+
+// Admin authorization
+function authorizeAdminJWT(req,res,next) {
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({Message: 'Forbidden'});
+    }
+    next();
+};
+
+// Refresh Token
+function refreshToken(req,res) {
+    try{
+        const {token} = req.body;
+        if(!token) {
+            return res.status(400).json({Message: 'Missing Token'});
+        }
+
+        jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+            if(err) {
+                return res.status(403).json({Message: 'Invalid Token'});
+            }
+            const newToken = generateToken(decoded.userId, decoded.role);
+            res.status(200).json({token: newToken});
+        });
+    }
+    catch(error) {
+        console.error('ERROR Refreshing Token:', error);
+        res.status(500).json({Message: 'Error Refreshing Token'});
+    }
+}
 
 // 5. API
 // Create Roles
@@ -81,9 +148,11 @@ async function registerUser(req,res) {
         if (existingUser.length > 0) {
             return res.status(400).json({Message: 'User already exists'});
         }
-        const password_hash = password + '_hashed'; // In production, hash the password before storing
+        const saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS) || 11;
+        const password_hash = await bcrypt.hash(password, saltRounds);
 
         const [newUser] = await pool.query('INSERT INTO users (firstName,lastName,email,password_hash) VALUES (?,?,?,?)', [firstName, lastName, email, password_hash]);
+
         res.status(201).json({
             Message: 'User created successfully',
             userId: newUser.insertId,
@@ -109,15 +178,21 @@ async function loginUser(req,res) {
         if(!email || !password) {
             return res.status(400).json({Message: 'Email and Password are required'});
         }
-        const [users] = await pool.query('SELECT user_id, firstName, lastName, email, password_hash FROM users WHERE email = ?', [email]);
+        const [users] = await pool.query(`
+            SELECT u.user_id, u.firstName, u.lastName, u.email, u.password_hash, u.roles_id, r.role_name
+            FROM users u
+            LEFT JOIN roles r ON u.roles_id = r.roles_id
+            WHERE u.email = ?`, [email]);
+
         if (users.length === 0) {
             return res.status(401).json({Message: 'Invalid Email or Password'});
         }
         const user = users[0];
-        if (user.password_hash !== password + '_hashed') {
+        const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+        if (!isPasswordValid) {
             return res.status(401).json({Message: 'Invalid Email or Password'});
         }
-        const sessionToken = 'session_token_placeholder'; // In production, generate a secure token
+        const sessionToken = generateToken(user.user_id, user.role_name);
         res.status(200).json({
             Message: 'Login successful',
             token: sessionToken,
@@ -126,13 +201,45 @@ async function loginUser(req,res) {
                 firstName: user.firstName,
                 lastName: user.lastName,
                 email: user.email,
-                role: user.role_id
+                role: user.role_name
             }
         });
     }
     catch(error) {
         console.error("ERROR logging in User:", error);
         res.status(500).send('Error logging in the user');
+    }
+};
+
+// Change Password
+async function changePassword(req,res) {
+    try{
+        const user_id = req.user.user_id;
+        const { currentPassword, newPassword } = req.body;
+
+        if(!currentPassword || !newPassword) {  
+            return res.status(400).json({Message: 'Current and New Password are required'});
+        }
+
+        const [users] = await pool.query('SELECT password_hash FROM users WHERE user_id = ?', [user_id]);
+        if (users.length === 0) {
+            return res.status(404).json({Message: 'User not found'});
+        }
+
+        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, users[0].password_hash);
+        if (!isCurrentPasswordValid) {
+            return res.status(401).json({Message: 'Current Password is incorrect'});
+        }
+
+        const saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS) || 11;
+        const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
+
+        await pool.query('UPDATE users SET password_hash = ? WHERE user_id = ?', [newPasswordHash, user_id]);
+        res.status(200).json({Message: 'Password changed successfully'});
+    }
+    catch(error){
+        console.error("ERROR Changing Password:", error);
+        res.status(500).send('Error Changing Password');
     }
 };
 
@@ -718,9 +825,9 @@ async function processPayment(req,res){
         }
         const cart_id = carts[0].cart_id;
         const get_items = `
-        SELECT SUM(ci.quantity * pi.price) AS total_amount
+        SELECT SUM(ci.qty * pi.price) AS total_amount
         FROM cart_items ci
-        JOIN product_items pi ON ci.product_item_id = pi.product_item_id
+        JOIN product_item pi ON ci.product_item_id = pi.product_item_id
         WHERE ci.cart_id = ?
         `;
         const [totals] = await pool.query(get.items, [cart_id]);
@@ -734,11 +841,12 @@ async function processPayment(req,res){
         const paymentIntent = await stripe.paymentIntents.create({
             amount: Math.round(total_amount * 100), 
             currency: 'aud',
-            automatic_payment_methods: {enabled: true},
+            automatic_payment_methods: {enabled: true}
         });
         res.status(200).json({
             Message: 'Payment Intent Created Successfully',
             clientSecret: paymentIntent.client_secret,
+            amount: total_amount
         });
     }
     catch(error){
@@ -760,16 +868,16 @@ async function createOrder(req,res){
         connection = await pool.getConnection();
         await connection.beginTransaction();
 
-        const [carts] = await connection.query('SELECT * FROM carts WHERE user_id = ?', [user_id]);
+        const [carts] = await connection.query('SELECT cart_id FROM carts WHERE user_id = ?', [user_id]);
         if(carts.length === 0){
             await connection.rollback();
             return res.status(404).json({Message: 'No active cart found for the user'});
         }
         const cart_id = carts[0].cart_id;
         const get_items = `
-        SELECT ci.product_item_id, ci.quantity, pi.price
+        SELECT ci.product_item_id, ci.qty, pi.price
         FROM cart_items ci
-        JOIN product_items pi ON ci.product_item_id = pi.product_item_id
+        JOIN product_item pi ON ci.product_item_id = pi.product_item_id
         WHERE ci.cart_id = ?
         `;
         const [items] = await connection.query(get_items, [cart_id]);
@@ -827,13 +935,17 @@ async function stripeWebhook(req,res){
     }
     if(event.type === 'payment_intent.succeeded'){
         const paymentIntent = event.data.object;
-        console.log('Payment Intent Succeeded:', paymentIntent.id);
-        await handlesuccessfulPayment(paymentIntent);
-        }
-        res.sendStatus(200);
+        console.log('Payment Succeeded:', paymentIntent.id);
+        await handleSuccessfulPayment(paymentIntent);
+    }else{
+        const failedPayment = event.data.object;
+        console.log('Payment Failed:', failedPayment.id)
+        await handleFailedPayment(failedPayment);
+    }   
+        res.sendStatus(200).json({recieved: true});
     };
 
-async function SuccessfulPayment(paymentIntent){
+async function handleSuccessfulPayment(paymentIntent){
     let connection;
     try{
         connection = await pool.getConnection();
@@ -1053,6 +1165,591 @@ async function searchProducts(req,res){
         res.status(500).json({Error:'Error Searching Products'});
     }
 };
+
+// Filer by Price Range
+async function filterByPriceRange(req,res){
+    try{
+        const {MinPrice, MaxPrice, page =1 , limit =12} = req.query;
+        const offset = (page - 1) * limit;
+
+        if(!MinPrice && !MaxPrice){
+            return res.status(400).json({Message: 'At least one of minPrice or maxPrice is required'});
+        }
+        let priceConditions = [];
+        let queryParams = [];
+
+        if(MinPrice && MaxPrice){
+            priceConditions.push('pi.price BETWEEN ? AND ?');
+            queryParams.push(parseFloat(MinPrice), parseFloat(MaxPrice));
+        } else if(MinPrice){
+            priceConditions.push('pi.price >= ?');
+            queryParams.push(parseFloat(MinPrice));
+        } else if(MaxPrice){
+            priceConditions.push('pi.price <= ?');
+            queryParams.push(parseFloat(MaxPrice));
+        }
+
+        const [products] = await pool.query(`
+            SELECT DISTINCT p.product_id, p.productname, p.description, p.product_image, p.is_featured, c.name as category_name, 
+                MIN(pi.price) as min_price,MAX(pi.price) as max_price
+            FROM products p
+            JOIN product_items pi ON p.product_id = pi.product_id
+            LEFT JOIN categories c ON p.category_id = c.category_id
+            WHERE ${priceConditions}
+            GROUP BY p.product_id
+            ORDER BY p.created_at DESC
+            LIMIT ? OFFSET ?`, [...queryParams, parseInt(limit), parseInt(offset)]);
+
+            res.status(200).json({
+                Data: products,
+                priceRange: {MinPrice, MaxPrice},
+                resultCount: products.length
+            });
+    }
+    catch(error){
+        console.error('ERROR Filtering Products by Price Range:', error);
+        res.status(500).json({Error:'Error Filtering Products by Price Range'});
+    }
+};
+
+// Get Featured Products
+async function getFeaturedProducts(req,res){
+    try{
+        const {limit = 10} = req.query;
+        const [products] = await pool.query(`
+            SELECT p.product_id, p.productname, p.description, p.product_image, p.created_at, c.name as category_name, MIN(pi.price) as min_price
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.category_id
+            LEFT JOIN product_items pi ON p.product_id = pi.product_id
+            WHERE p.is_featured = 1
+            GROUP BY p.product_id
+            ORDER BY p.created_at DESC
+            LIMIT ?`, [parseInt(limit)]);
+
+        res.status(200).json({
+            Data: products,
+            resultCount: products.length
+        });
+    }
+    catch(error){
+        console.error('ERROR Fetching Featured Products:', error);
+        res.status(500).json({Error:'Error Fetching Featured Products'});
+    }
+};
+
+// Get Product Suggestions
+async function getProductSuggestions(req,res){
+    try{
+        const {productId} = req.params;
+        const {limit = 5} = req.query;
+
+        const [currentProduct] = await pool.query('SELECT category_id FROM products WHERE product_id = ?', [productId]);
+
+        if(currentProduct.length === 0){
+            return res.status(404).json({Message: 'Product not found'});
+        }
+
+        const categoryId = currentProduct[0].category_id;
+
+        const [suggestions] = await pool.query(`
+            SELECT p.product_id, p.productname, p.description, p.product_image, MIN(pi.price) as min_price
+            FROM products p
+            LEFT JOIN product_items pi ON p.product_id = pi.product_id
+            WHERE p.category_id = ? AND p.product_id != ?
+            GROUP BY p.product_id
+            ORDER BY p.created_at DESC
+            LIMIT ?`, [categoryId, productId, parseInt(limit)]);
+
+        res.status(200).json({
+            Data: suggestions,
+            resultCount: suggestions.length
+        });
+    }
+    catch(error){
+        console.error('ERROR Fetching Product Suggestions:', error);
+        res.status(500).json({Error:'Error Fetching Product Suggestions'});
+    }
+};
+
+// GET Available Filters
+async function getAvailableFilters(req,res){
+    try{
+        const [priceRange] = await pool.query(`
+            SELECT MIN(pi.price) as min_price, MAX(pi.price) as max_price
+            FROM products p `);
+        
+        const [categories] = await pool.query(`
+            SELECT c.category_id, c.name, COUNT(p.product_id) as product_count
+            FROM categories c
+            LEFT JOIN products p ON c.category_id = p.category_id
+            GROUP BY c.category_id, c.name
+            HAVING product_count > 0
+            ORDER BY c.name `);
+
+        const [suppliers] = await pool.query(`
+            SELECT s.supplier_id, s.name, COUNT(p.product_id) as product_count
+            FROM suppliers s
+            LEFT JOIN products p ON s.supplier_id = p.supplier_id
+            GROUP BY s.supplier_id, s.name
+            HAVING product_count > 0
+            ORDER BY s.name`);
+
+        res.status(200).json({
+            Data: {
+                priceRange: priceRange[0],
+                categories,
+                suppliers
+            }
+        });
+    }
+    catch(error){
+        console.error('ERROR Fetching Available Filters:', error);
+        res.status(500).json({Error:'Error Fetching Available Filters'});
+    }
+};
+
+// Product Reviews
+async function createProductReview(req,res){
+    try{
+        const user_id = req.user.user_id;
+        const {productId} = req.params; 
+        const {rating, comment} = req.body;
+
+        if(!rating || rating < 1 || rating > 5){
+            return res.status(400).json({Message: 'Rating must be between 1 and 5'});
+        }
+
+        //Check for product
+        const [product] = await pool.query('SELECT product_id FROM products WHERE product_id = ?', [productId]);
+        if(product.length === 0){
+            return res.status(404).json({Message: 'Product not found'});
+        }
+
+        const [existingReview] = await pool.query(`
+            SELECT review_id FROM reviews WHERE user_id = ? AND product_id = ?`, [user_id, productId]);
+
+        if(existingReview.length > 0){
+            return res.status(400).json({Message: 'You have already reviewed this product'});
+        } 
+    
+        if(existingReview.length > 0){
+            return res.status(400).json({Message: 'You have already reviewed this product'});
+        }
+
+        //verify user purchased the product
+        const [purchased] = await pool.query(`
+            SELECT COUNT(*) as purchase_count
+            FROM shop_orders so
+            JOIN order_line ol ON so.shop_order_id = ol.shop_order_id
+            JOIN product_items pi ON ol.product_item_id = pi.product_item_id
+            WHERE so.user_id = ? AND pi.product_id = ? AND so.payment_status = 'Paid'
+            )`, [user_id, productId]);
+        
+        const verifiedPurchase = purchased[0].purchase_count > 0;
+
+        if(!verifiedPurchase){
+            return res.status(400).json({Message: 'You can only review products you have purchased'});
+        }
+        //Insert review
+        const[reviews] = await pool.query(`INSERT INTO product_reviews (user_id, product_id, rating, comment) VALUES (?, ?, ?, ?)`, [user_id, productId, rating, comment]);
+
+        res.status(201).json({
+            Message: 'Review created successfully',
+            data: {
+                reviewId: reviews.insertId, 
+                verifiedPurchase
+            }
+        });
+    }
+    catch(error){
+        console.error('ERROR Creating Product Review:', error);
+        res.status(500).json({Error:'Error Creating Product Review'});
+    }
+};
+
+//Get Product Reviews
+async function getProductReviews(req,res){
+    try{
+        const {productId} = req.params;
+        const {page = 1, limit = 10, sortBy = 'review_date', sortOrder = 'DESC'} = req.query;   
+        const offset = (page - 1) * limit;
+
+        const allowedSortBy = ['review_date', 'rating'];
+        const allowedSortOrder = ['ASC', 'DESC'];
+
+        if(!allowedSortBy.includes(sortBy)){
+            return res.status(400).json({Message: `Invalid sortBy value. Allowed values are: ${allowedSortBy.join(', ')}`});
+        }
+        if(!allowedSortOrder.includes(sortOrder.toUpperCase())){
+            return res.status(400).json({Message: `Invalid sortOrder value. Allowed values are: ${allowedSortOrder.join(', ')}`});
+        }
+
+        const [reviews] = await pool.query(`
+            SELECT r.review_id, r.rating, r.comment, r.review_date, u.firstName, u.lastName
+            CASE 
+                WHEN purchases.purchase_count > 0 THEN TRUE
+                ELSE FALSE
+            END as is_verified_purchase
+            FROM reviews r
+            JOIN users u ON r.user_id = u.user_id
+            LEFT JOIN(
+            SELECT so.user_id, COUNT(*) as purchase_count
+            FROM shop_orders so
+            JOIN order_line ol ON so.shop_order_id = ol.shop_order_id
+            JOIN product_items pi ON ol.product_item_id = pi.product_item_id
+            WHERE pi.product_id = ? AND so.payment_status = 'Paid'
+            GROUP BY so.user_id
+            ) as purchases ON r.user_id = purchases.user_id
+            WHERE r.product_id = ?
+            ORDER BY ${sortBy} ${sortOrder}
+            LIMIT ? OFFSET ?`, [productId, productId, parseInt(limit), parseInt(offset)]);
+
+            const[stats] = await pool.query(`
+                SELECT 
+                    COUNT(*) as total_reviews,
+                    AVG(rating) as average_rating,
+                    SUM(CASE WHEN rating = 5 THEN 1 ELSE 0 END) as five_star,
+                    SUM(CASE WHEN rating = 4 THEN 1 ELSE 0 END) as four_star,
+                    SUM(CASE WHEN rating = 3 THEN 1 ELSE 0 END) as three_star,
+                    SUM(CASE WHEN rating = 2 THEN 1 ELSE 0 END) as two_star,
+                    SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) as one_star
+                FROM reviews
+                WHERE product_id = ?`, [productId]);
+
+            const avgrating = stats[0].average_rating;
+
+            res.status(200).json({
+                Data: {
+                    reviews,
+                    statistics: {
+                        ...stats[0],
+                        average_rating: avgrating ? parseFloat(avgrating.toFixed(1)) : 0.0
+                    },
+                    pagination: {
+                        currentPage: parseInt(page),
+                        totalPages: Math.ceil(stats[0].total_reviews / limit),
+                        totalReviews: stats[0].total_reviews,
+                    }
+                }
+            });
+        }
+        catch(error){
+            console.error('ERROR Fetching Product Reviews:', error);
+            res.status(500).json({Error:'Error Fetching Product Reviews'});
+        }   
+};
+
+//Update Product Review
+async function updateProductReview(req,res){
+    try{
+        const user_id = req.user.user_id;
+        const {reviewId} = req.params;
+        const {rating, comment} = req.body;
+
+        if(rating && (rating < 1 || rating > 5)){
+            return res.status(400).json({Message: 'Rating must be between 1 and 5'});
+        }
+
+        const[reviews] = await pool.query('SELECT review_id FROM reviews WHERE review_id = ? AND user_id = ?', [reviewId, user_id]);
+
+        if(reviews.length === 0){
+            return res.status(404).json({Message: 'Review not found or you are not authorized to update this review'});
+        }
+
+        const updateFields = {};
+        if(rating) updateFields.rating = rating;
+        if(comment !== undefined) updateFields.comment = comment;
+
+        if(Object.keys(updateFields).length === 0){
+            return res.status(400).json({Message: 'No fields to update'});
+        }
+
+        await pool.query('UPDATE reviews SET ? WHERE review_id = ?', [updateFields, reviewId]);
+
+        res.status(200).json({Message: 'Review updated successfully'});
+    }
+    catch(error){
+        console.error('ERROR Updating Product Review:', error);
+        res.status(500).json({Error:'Error Updating Product Review'});
+    }
+};
+
+// DELETE Product Review
+async function deleteProductReview(req,res){
+    try{
+        const user_id = req.user.user_id;
+        const {reviewId} = req.params;
+
+        const[reviews] = await pool.query('SELECT review_id FROM reviews WHERE review_id = ? AND user_id = ?', [reviewId, user_id]);
+
+        if(reviews.length === 0){
+            return res.status(404).json({Message: 'Review not found or you are not authorized to delete this review'});
+        }
+
+        await pool.query('DELETE FROM reviews WHERE review_id = ?', [reviewId]);
+        res.status(200).json({Message: 'Review deleted successfully'});
+    }
+    catch(error){
+        console.error('ERROR Deleting Product Review:', error);
+        res.status(500).json({Error:'Error Deleting Product Review'});
+    }
+};
+
+// GET Average Product Rating
+async function getAverageProductRating(req,res){
+    try{
+        const {productId} = req.params;
+        const [stats] = await pool.query(`
+            SELECT 
+                COUNT(*) as total_reviews,
+                AVG(rating) as average_rating,
+                SUM(CASE WHEN rating = 5 THEN 1 ELSE 0 END) as five_star,
+                SUM(CASE WHEN rating = 4 THEN 1 ELSE 0 END) as four_star,
+                SUM(CASE WHEN rating = 3 THEN 1 ELSE 0 END) as three_star,
+                SUM(CASE WHEN rating = 2 THEN 1 ELSE 0 END) as two_star,
+                SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) as one_star
+            FROM reviews
+            WHERE product_id = ?`, [productId]);
+
+        const avgrating = stats[0].average_rating;
+
+        res.status(200).json({
+            Data: {
+                productId: parseInt(productId),
+                totalReviews: avgrating.total_reviews,
+                averageRating: parseFloat(avgrating.average_rating || 0).toFixed(1),
+                ratingsBreakdown: {
+                    5: stats.five_star,
+                    4: stats.four_star,
+                    3: stats.three_star,
+                    2: stats.two_star,
+                    1: stats.one_star
+                }
+            }
+        });
+    }
+    catch(error){
+        console.error('ERROR Fetching Average Product Rating:', error);
+        res.status(500).json({Error:'Error Fetching Average Product Rating'});
+    }
+};
+
+// GET User's Product Reviews
+async function getUserProductReviews(req,res){
+    try{
+        const user_id = req.user.user_id;
+        const {page = 1, limit = 10} = req.query;
+        const offset = (page - 1) * limit;
+
+        const [reviews] = await pool.query(`
+            SELECT r.review_id, r.rating, r.comment, r.review_date, p.product_id, p.productname, p.product_image
+            FROM reviews r
+            JOIN products p ON r.product_id = p.product_id
+            WHERE r.user_id = ?
+            ORDER BY r.review_date DESC
+            LIMIT ? OFFSET ?`, [user_id, parseInt(limit), parseInt(offset)]);
+
+        const [countResult] = await pool.query('SELECT COUNT(*) as total_reviews FROM reviews WHERE user_id = ?', [user_id]);
+
+        res.status(200).json({
+            Data: {
+                reviews,
+                pagination: {
+                    currentPage: parseInt(page),
+                    totalPages: Math.ceil(countResult[0].total_reviews / limit),
+                    totalReviews: countResult[0].total_reviews
+                }
+            }
+        });
+    }
+    catch(error){
+        console.error('ERROR Fetching User Product Reviews:', error);
+        res.status(500).json({Error:'Error Fetching User Product Reviews'});
+    }
+};
+
+// Get Dashboard Stats (Admin only)
+async function getDashboardStats(req,res){
+    try{
+        const [revenueResult] = await pool.query('SELECT SUM(order_total) as total_revenue FROM shop_orders WHERE payment_status = "Paid"');
+
+        const [ordersResult] = await pool.query('SELECT COUNT(*) as total_orders FROM shop_orders');
+
+        const [usersResult] = await pool.query('SELECT COUNT(*) as total_users FROM users');
+
+        const [productsResult] = await pool.query('SELECT COUNT(*) as total_products FROM products');
+
+        res.status(200).json({
+            Data: {
+                total_revenue: parseFloat(revenueResult[0].total_revenue) || 0,
+                total_orders: ordersResult[0].total_orders ,
+                total_users: usersResult[0].total_users ,
+                total_products: productsResult[0].total_products
+            }
+        });
+    }
+    catch(error){
+        console.error('ERROR Fetching Dashboard Stats:', error);
+        res.status(500).json({Error:'Error Fetching Dashboard Stats'});
+    }
+};
+
+//Get All orders (Admin only)
+async function getAllOrdersAdmin(req,res){
+    try{
+        const {page = 1, limit = 15, statusId} = req.query;
+        const offset = (page - 1) * limit;
+
+        let whereClause = '';
+        let queryParams = [];
+
+        if (statusId) {
+            whereClause = 'WHERE so.order_status_id = ? ';
+            queryParams.push(statusId);
+        }
+        
+        const [orders] = await pool.query(`
+            SELECT so.shop_order_id, so.order_date, so.order_total, so.payment_status, os.status as order_status, u.firstName, u.lastName, u.email
+            FROM shop_orders so
+            JOIN order_status os ON so.order_status_id = os.order_status_id
+            JOIN users u ON so.user_id = u.user_id
+            ${whereClause}
+            ORDER BY so.order_date DESC
+            LIMIT ? OFFSET ?`, [...queryParams, parseInt(limit), parseInt(offset)]);
+
+        const [countResult] = await pool.query(`SELECT COUNT(*) as total FROM shop_orders so ${whereClause}`, queryParams);
+
+        res.status(200).json({
+            Data: {
+                orders,
+                pagination: {
+                    currentPage: parseInt(page),
+                    totalPages: Math.ceil(countResult[0].total / limit),
+                    totalOrders: countResult[0].total
+                }
+            }
+        });
+    }
+    catch(error){
+        console.error('ERROR Fetching All Orders:', error);
+        res.status(500).json({Error:'Error Fetching All Orders'});
+    }
+};
+
+//Get All Users (Admin only)
+async function getAllUsersAdmin(req,res){
+    try{
+        const {page = 1, limit = 15} = req.query;
+        const offset = (page - 1) * limit;
+
+        const [users] = await pool.query(`
+            SELECT u.user_id, u.firstName, u.lastName, u.email, u.phoneNumber, u.created_at, r.role_name
+            FROM users u
+            LEFT JOIN roles r ON u.role_id = r.role_id
+            ORDER BY u.created_at DESC
+            LIMIT ? OFFSET ?`, [parseInt(limit), parseInt(offset)]);
+
+        const [countResult] = await pool.query('SELECT COUNT(*) as total FROM users');
+
+        res.status(200).json({
+            Data: {
+                users,
+                pagination: {
+                    currentPage: parseInt(page),
+                    totalPages: Math.ceil(countResult[0].total / limit),
+                    totalUsers: countResult[0].total
+                }
+            }
+        });
+    }
+    catch(error){
+        console.error('ERROR Fetching All Users:', error);
+        res.status(500).json({Error:'Error Fetching All Users'});
+    }
+};
+
+// Update User Role (Admin only)
+async function updateUserRole(req,res){
+    try{
+        const {userId} = req.params;
+        const {roleId} = req.body;
+
+        if(!roleId){
+            return res.status(400).json({Message: 'Role ID is required'});
+        }
+        const [updateRole] = await pool.query('UPDATE users SET role_id = ? WHERE user_id = ?', [roleId, userId]);
+        if(updateRole.affectedRows === 0){
+            return res.status(404).json({Message: 'User not found'});
+        }
+        res.status(200).json({Message: 'User role updated successfully'});
+    }
+    catch(error){
+        console.error('ERROR Updating User Role:', error);
+        res.status(500).json({Error:'Error Updating User Role'});
+    }
+};
+
+//Delete User (Admin only)
+async function deleteUserAdmin(req,res){
+    try{
+        const {userId} = req.params;
+        const [deleteUser] = await pool.query('DELETE FROM users WHERE user_id = ?', [userId]);
+        if(deleteUser.affectedRows === 0){
+            return res.status(404).json({Message: 'User not found'});
+        }
+        res.status(200).json({Message: 'User deleted successfully'});
+    }
+    catch(error){
+        console.error('ERROR Deleting User:', error);
+        res.status(500).json({Error:'Error Deleting User'});
+    }
+};
+
+// Get Sales Analytics (Admin only)
+async function getSalesAnalytics(req,res){
+    try{
+        const {startDate, endDate, timeframe = '7d'} = req.query;
+        let dateFilter = '';
+        const queryParams = [];
+
+        if(startDate && endDate){
+            dateFilter = 'AND order_date BETWEEN ? AND ? ';
+            queryParams.push(startDate, endDate);
+        }else {
+            let timeframeCondition = {
+                "24h": "1 DAY",
+                "7d": "7 DAY",
+                "30d": "30 DAY",
+                "3m": "3 MONTH",
+                "6m": "6 MONTH",
+                "1y": "1 YEAR"
+            };
+            const interval = timeframeCondition[timeframe] || '7 DAY';
+            dateFilter = `AND order_date >= NOW() - INTERVAL ${interval} `;
+        }
+
+        const query = `
+            SELECT 
+                DATE(order_date) as date,
+                COUNT(*) as orders_count,
+                SUM(order_total) as daily_revenue
+            FROM shop_orders
+            WHERE payment_status = 'Paid' 
+            ${dateFilter}
+            GROUP BY date
+            ORDER BY date ASC
+        `;
+
+        const [salesData] = await pool.query(query, queryParams);
+
+        res.status(200).json({Data: salesData});
+    }  
+    catch(error){
+        console.error('ERROR Fetching Sales Analytics:', error);
+        res.status(500).json({Error:'Error Fetching Sales Analytics'});
+    }
+};
+
 // 6. API  ROUTES
 app.get('/', (req,res) => {
     res.send('Node.js and MYSQL API is running');
@@ -1076,8 +1773,30 @@ app.delete('/products/:id', deleteProduct);
 
 // Category routes
 app.get('/categories', getAllCategories);
-app.get('/categories/:categoryId/products', getProductsByCategory);
+app.get('/categories/:categoryId/products', getProductByCategory);
 
+// Search and Filter routes
+app.get('/products/search', searchProducts);
+app.get('/products/filter/price', filterByPriceRange);
+app.get('/products/featured', getFeaturedProducts);
+app.get('/products/:productId/suggestions', getProductSuggestions);
+app.get('/filters', getAvailableFilters);
+
+// Review routes
+app.post('/products/:productId/reviews', createProductReview);
+app.get('/products/:productId/reviews', getProductReviews);
+app.put('/reviews/:reviewId', updateProductReview);
+app.delete('/reviews/:reviewId', deleteProductReview);
+app.get('/users/reviews', getUserProductReviews);
+app.get('/products/:productId/rating', getAverageProductRating);
+
+// Admin routes (should be protected by an isAdmin middleware)
+app.get('/admin/dashboard/stats', getDashboardStats);
+app.get('/admin/orders', getAllOrdersAdmin);
+app.get('/admin/users', getAllUsersAdmin);
+app.put('/admin/users/:userId/role', updateUserRole);
+app.delete('/admin/users/:userId', deleteUserAdmin);
+app.get('/admin/analytics/sales', getSalesAnalytics);
 
 //7. RUN
 app.listen(3000,()=>{
