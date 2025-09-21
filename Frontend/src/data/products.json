@@ -1,0 +1,262 @@
+[
+  {
+    "id": 1,
+    "name": "Aurora Diamond Solitaire Ring",
+    "category": "Rings",
+    "price": 18500,
+    "description": "An exquisite 18k white gold solitaire ring with a brilliant-cut diamond, symbolizing timeless elegance.",
+    "image_url": "https://images.unsplash.com/photo-1603575448886-7c21f65f2e6a?auto=format&fit=crop&w=1200&q=80",
+    "premium": true
+  },
+  {
+    "id": 2,
+    "name": "Celeste Sapphire Halo Necklace",
+    "category": "Necklaces",
+    "price": 12200,
+    "description": "A refined necklace featuring a deep blue sapphire surrounded by a halo of pavé diamonds in platinum.",
+    "image_url": "https://images.unsplash.com/photo-1603570418897-b7c42a2a6c70?auto=format&fit=crop&w=1200&q=80",
+    "new": true
+  },
+  {
+    "id": 3,
+    "name": "Regalia Emerald Pendant",
+    "category": "Pendants",
+    "price": 8900,
+    "description": "An 18k yellow gold pendant with a rich green emerald centerpiece, suspended from a fine chain.",
+    "image_url": "https://images.unsplash.com/photo-1586363104868-b5d0f3e03aa3?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": 4,
+    "name": "Elysian Diamond Tennis Bracelet",
+    "category": "Bracelets",
+    "price": 15200,
+    "description": "A classic tennis bracelet featuring rows of flawless diamonds set in 18k white gold.",
+    "image_url": "https://images.unsplash.com/photo-1589820296154-6a9f4e8d73d1?auto=format&fit=crop&w=1200&q=80",
+    "premium": true
+  },
+  {
+    "id": 5,
+    "name": "Seraphine Rose Gold Earrings",
+    "category": "Earrings",
+    "price": 7200,
+    "description": "Romantic 18k rose gold drop earrings adorned with marquise-cut diamonds.",
+    "image_url": "https://images.unsplash.com/photo-1620290992198-b4c37dd9d2b0?auto=format&fit=crop&w=1200&q=80",
+    "new": true
+  },
+  {
+    "id": 6,
+    "name": "Prestige Chronograph Watch",
+    "category": "Watches",
+    "price": 24500,
+    "description": "A luxury Swiss chronograph crafted with 18k gold casing, sapphire crystal, and precision mechanics.",
+    "image_url": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=1200&q=80",
+    "premium": true
+  },
+  {
+    "id": 7,
+    "name": "Starlight Diamond Eternity Band",
+    "category": "Rings",
+    "price": 9900,
+    "description": "An eternity band encircled with hand-set diamonds symbolizing infinite love.",
+    "image_url": "https://images.unsplash.com/photo-1603570419213-3cbb40f19a28?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": 8,
+    "name": "Venetian Pearl Necklace",
+    "category": "Necklaces",
+    "price": 7400,
+    "description": "Elegant freshwater pearls strung delicately with a diamond-studded 18k clasp.",
+    "image_url": "https://images.unsplash.com/photo-1589987607874-97bcf96e65e4?auto=format&fit=crop&w=1200&q=80",
+    "new": true
+  },
+  {
+    "id": 9,
+    "name": "Opulence Ruby Pendant",
+    "category": "Pendants",
+    "price": 11300,
+    "description": "A fiery ruby centerpiece encased in 18k rose gold, radiating warmth and luxury.",
+    "image_url": "https://images.unsplash.com/photo-1600180758895-0c4422ef577d?auto=format&fit=crop&w=1200&q=80",
+    "premium": true
+  },
+  {
+    "id": 10,
+    "name": "Aria Diamond Cuff Bracelet",
+    "category": "Bracelets",
+    "price": 13400,
+    "description": "A bold 18k gold cuff adorned with pavé diamonds for modern sophistication.",
+    "image_url": "https://images.unsplash.com/photo-1614284364290-95a4d3f31c52?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": 11,
+    "name": "Celestial Drop Earrings",
+    "category": "Earrings",
+    "price": 6200,
+    "description": "Delicate diamond drops set in white gold, perfect for evening elegance.",
+    "image_url": "https://images.unsplash.com/photo-1617038260897-43e95f1d30bb?auto=format&fit=crop&w=1200&q=80",
+    "new": true
+  },
+  {
+    "id": 12,
+    "name": "Imperial Sapphire Bracelet",
+    "category": "Bracelets",
+    "price": 15900,
+    "description": "A luxury 18k bracelet showcasing sapphires with diamond accents.",
+    "image_url": "https://images.unsplash.com/photo-1614284828937-90c8e6e58e88?auto=format&fit=crop&w=1200&q=80",
+    "premium": true
+  },
+  {
+    "id": 13,
+    "name": "Golden Horizon Ring",
+    "category": "Rings",
+    "price": 8200,
+    "description": "18k gold ring with a bold emerald-cut centerpiece stone.",
+    "image_url": "https://images.unsplash.com/photo-1614282829819-9136cdb36805?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": 14,
+    "name": "Midnight Black Diamond Necklace",
+    "category": "Necklaces",
+    "price": 18700,
+    "description": "18k black gold necklace featuring rare black diamonds.",
+    "image_url": "https://images.unsplash.com/photo-1620290965818-0c77c3d2ea7d?auto=format&fit=crop&w=1200&q=80",
+    "premium": true
+  },
+  {
+    "id": 15,
+    "name": "Aurora Borealis Earrings",
+    "category": "Earrings",
+    "price": 5600,
+    "description": "Color-shifting gemstones set in platinum, inspired by the northern lights.",
+    "image_url": "https://images.unsplash.com/photo-1620290991725-0fa2a0524a0a?auto=format&fit=crop&w=1200&q=80",
+    "new": true
+  },
+  {
+    "id": 16,
+    "name": "Legacy Platinum Watch",
+    "category": "Watches",
+    "price": 31200,
+    "description": "A platinum Swiss masterpiece with diamond accents and precision engineering.",
+    "image_url": "https://images.unsplash.com/photo-1600180757969-f6dfb6d4d7a2?auto=format&fit=crop&w=1200&q=80",
+    "premium": true
+  },
+  {
+    "id": 17,
+    "name": "Rose Petal Pendant",
+    "category": "Pendants",
+    "price": 4100,
+    "description": "Rose gold pendant with diamond petals crafted for romantic elegance.",
+    "image_url": "https://images.unsplash.com/photo-1583343625981-9620cbb0d585?auto=format&fit=crop&w=1200&q=80",
+    "new": true
+  },
+  {
+    "id": 18,
+    "name": "Velour Pearl Earrings",
+    "category": "Earrings",
+    "price": 3700,
+    "description": "Classic pearl studs in 18k white gold with diamond halos.",
+    "image_url": "https://images.unsplash.com/photo-1590080876364-b29b0f6c2e98?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": 19,
+    "name": "Crown Royal Ruby Ring",
+    "category": "Rings",
+    "price": 13200,
+    "description": "An 18k gold ring with a radiant ruby centerpiece.",
+    "image_url": "https://images.unsplash.com/photo-1614284431632-b6a447ddb5a0?auto=format&fit=crop&w=1200&q=80",
+    "premium": true,
+    "new": true
+  },
+  {
+    "id": 20,
+    "name": "Moonlight Diamond Bracelet",
+    "category": "Bracelets",
+    "price": 14100,
+    "description": "Diamond bracelet designed to shimmer under moonlight.",
+    "image_url": "https://images.unsplash.com/photo-1589820296041-23bb26e6d0b5?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": 21,
+    "name": "Opal Essence Necklace",
+    "category": "Necklaces",
+    "price": 6400,
+    "description": "An opal centerpiece with shifting rainbow tones set in 18k gold.",
+    "image_url": "https://images.unsplash.com/photo-1620290991737-76a2a3c6b64e?auto=format&fit=crop&w=1200&q=80",
+    "new": true
+  },
+  {
+    "id": 22,
+    "name": "Mirage Diamond Pendant",
+    "category": "Pendants",
+    "price": 10300,
+    "description": "Pendant with layered diamonds giving a mirage sparkle effect.",
+    "image_url": "https://images.unsplash.com/photo-1583343630301-d04b6ecf30a7?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": 23,
+    "name": "Celestial Gold Earrings",
+    "category": "Earrings",
+    "price": 7200,
+    "description": "18k gold earrings shaped like stars with diamond accents.",
+    "image_url": "https://images.unsplash.com/photo-1614282829196-774a1d3eec19?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": 24,
+    "name": "Infinity Diamond Ring",
+    "category": "Rings",
+    "price": 11800,
+    "description": "Infinity design band with continuous pavé diamonds.",
+    "image_url": "https://images.unsplash.com/photo-1603570418893-7ecf57b9c6db?auto=format&fit=crop&w=1200&q=80",
+    "premium": true
+  },
+  {
+    "id": 25,
+    "name": "Noir Onyx Bracelet",
+    "category": "Bracelets",
+    "price": 5100,
+    "description": "Black onyx stones with a polished 18k gold clasp.",
+    "image_url": "https://images.unsplash.com/photo-1620290991850-728621f081e1?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": 26,
+    "name": "Golden Hour Necklace",
+    "category": "Necklaces",
+    "price": 8700,
+    "description": "18k gold necklace inspired by the warm glow of sunset.",
+    "image_url": "https://images.unsplash.com/photo-1603570419020-d3f4fb0e07a7?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": 27,
+    "name": "Regent Platinum Watch",
+    "category": "Watches",
+    "price": 29800,
+    "description": "Swiss platinum watch with diamond bezel and sapphire crystal.",
+    "image_url": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=1200&q=80",
+    "premium": true
+  },
+  {
+    "id": 28,
+    "name": "Twilight Topaz Earrings",
+    "category": "Earrings",
+    "price": 4300,
+    "description": "Blue topaz earrings in white gold with diamond accents.",
+    "image_url": "https://images.unsplash.com/photo-1620290991732-420b7f4d899d?auto=format&fit=crop&w=1200&q=80",
+    "new": true
+  },
+  {
+    "id": 29,
+    "name": "Citrine Sunburst Pendant",
+    "category": "Pendants",
+    "price": 5500,
+    "description": "Radiant citrine gemstone pendant in 18k yellow gold.",
+    "image_url": "https://images.unsplash.com/photo-1583343631065-1b3e57d879b7?auto=format&fit=crop&w=1200&q=80"
+  },
+  {
+    "id": 30,
+    "name": "Majesty Diamond Crown Ring",
+    "category": "Rings",
+    "price": 21000,
+    "description": "18k white gold ring with diamonds shaped in a crown design for royalty.",
+    "image_url": "https://images.unsplash.com/photo-1603570419293-bb8a23995df9?auto=format&fit=crop&w=1200&q=80",
+    "premium": true
+  }
+]

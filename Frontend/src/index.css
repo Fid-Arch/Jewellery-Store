@@ -1,0 +1,6 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ✅ Custom global luxury styles */
+@import "./styles/globals.css";

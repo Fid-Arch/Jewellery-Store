@@ -1,0 +1,194 @@
+/* === Base Reset === */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Inter", sans-serif;
+  background-color: #fffdf8; /* soft off-white */
+  color: #222;
+  line-height: 1.6;
+}
+
+/* === Primary Buttons (used in Login + Admin Dashboard) === */
+.btn-primary {
+  background: linear-gradient(to right, #facc15, #ca8a04); /* gold gradient */
+  color: #fff; /* white text always visible */
+  font-weight: bold;
+  padding: 0.75rem 1.5rem; /* px-6 py-3 */
+  border-radius: 0.5rem;
+  border: 1px solid #eab308; /* thin gold border */
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+  letter-spacing: 0.5px;
+  display: inline-block;
+  text-align: center;
+}
+
+.btn-primary:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+  background: linear-gradient(to right, #fde047, #eab308); /* brighter gold */
+  color: #000; /* black text on hover for contrast */
+}
+
+/* === Outline Buttons (used in Profile, Admin, Footer, etc.) === */
+.btn-outline {
+  border: 2px solid #eab308; /* yellow-500 */
+  color: #ca8a04;
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  background: transparent;
+  transition: all 0.3s ease;
+  display: inline-block;
+  text-align: center;
+}
+
+.btn-outline:hover {
+  background: #facc15;
+  color: #000;
+  transform: scale(1.05);
+}
+
+/* === Cards (used in Product Lists, Home Sections, etc.) === */
+.card {
+  background: #fff;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(234, 179, 8, 0.3); /* gold tint */
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+  transform: translateY(-4px);
+}
+
+/* === Badges (for Cart count, Order status, Roles) === */
+.badge {
+  background: #eab308; /* yellow-500 */
+  color: white;
+  font-size: 0.75rem;
+  font-weight: bold;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+}
+
+/* === Luxury Button (Navbar CTA, Hero, etc.) === */
+.luxury-btn {
+  background: linear-gradient(90deg, #ffd700, #e6b800); /* gold gradient */
+  color: black;
+  font-weight: 600;
+  padding: 0.5rem 1.25rem;
+  border-radius: 9999px; /* pill shape */
+  transition: all 0.3s ease-in-out;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.luxury-btn:hover {
+  background: linear-gradient(90deg, #e6b800, #ffd700);
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+}
+
+/* === Premium Badge === */
+.badge-premium {
+  background: linear-gradient(90deg, #ffd700, #ffae00); /* rich gold */
+  color: black;
+  font-size: 0.7rem;
+  font-weight: bold;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px; /* pill shape */
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* === Premium Shine Effect === */
+.premium-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.premium-shine::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -75%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    120deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0.1) 100%
+  );
+  transform: skewX(-25deg);
+}
+
+.premium-shine:hover::after {
+  animation: shine 1.2s ease forwards;
+}
+
+@keyframes shine {
+  100% {
+    left: 125%;
+  }
+}
+/* === New Arrival Badge === */
+.badge-new {
+  background: linear-gradient(90deg, #c0c0c0, #e5e5e5); /* silver gradient */
+  color: black;
+  font-size: 0.7rem;
+  font-weight: bold;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  box-shadow: 0 0 6px rgba(200, 200, 200, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* === Luxury Dark Mode (Black + Gold Theme) === */
+.dark {
+  background-color: #0d0d0d; /* deep black */
+  color: #f5f5f5; /* soft white text */
+}
+
+.dark .card {
+  background: #1a1a1a; /* dark card */
+  border: 1px solid rgba(234, 179, 8, 0.5); /* gold tint */
+  box-shadow: 0 2px 8px rgba(255, 215, 0, 0.1);
+}
+
+.dark .btn-primary {
+  background: linear-gradient(to right, #facc15, #ca8a04);
+  border: 1px solid #facc15;
+  color: #fff;
+}
+
+.dark .btn-primary:hover {
+  background: linear-gradient(to right, #fde047, #eab308);
+  color: #000;
+}
+
+.dark .btn-outline {
+  border: 2px solid #facc15;
+  color: #facc15;
+}
+
+.dark .btn-outline:hover {
+  background: #facc15;
+  color: #000;
+}
+
+.dark .badge,
+.dark .badge-premium,
+.dark .badge-new {
+  color: black;
+  background: linear-gradient(90deg, #ffd700, #e6b800);
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
+}
