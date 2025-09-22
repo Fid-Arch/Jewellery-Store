@@ -37,9 +37,9 @@ pool.getConnection()
     });
 
 // Generate JWT Token
-function generateToken(userId, role = 'user'){
+function generateToken(user_id, role = 'user'){
     return jwt.sign(
-        {userId, role},
+        {user_id, role},
         process.env.JWT_SECRET || 'your_jwt_secret_key',
         {expiresIn: process.env.JWT_EXPIRES_IN || '24h'}
     );
@@ -64,10 +64,11 @@ function authenticateJWT(req,res,next) {
             };
             next();
         });
+        res.status(200).json({Message: 'Token Authenticated Successfully'});
     }
     catch(error){
         console.error('ERROR Authenticating JWT:', error);
-        res.status(500).json({Message: 'Error Authenticating JWT'});
+        res.status(400).json({Message: 'Error Authenticating JWT'});
     }
 };
 
@@ -91,7 +92,7 @@ function refreshToken(req,res) {
             if(err) {
                 return res.status(403).json({Message: 'Invalid Token'});
             }
-            const newToken = generateToken(decoded.userId, decoded.role);
+            const newToken = generateToken(decoded.user_Id, decoded.role);
             res.status(200).json({token: newToken});
         });
     }
@@ -243,6 +244,25 @@ async function changePassword(req,res) {
     }
 };
 
+//Logout User
+async function logoutUser(req,res) {
+    try{
+        const user_id = req.user.user_id;
+        const sessionToken = req.body.token;
+        if(!sessionToken) {
+            return res.status(400).json({Message: 'Missing Token'});
+        }
+
+        const decoded = jwt.decode(sessionToken);
+        const expiresAt = decoded.exp * 1000;
+
+    }
+    catch(error){
+        console.error("ERROR Logging out User:", error);
+        res.status(500).send('Error Logging out User');
+    }
+};
+
 // Get All Users
 async function getAllUsers(req,res) {
     try {
@@ -371,12 +391,12 @@ async function userAddress (req,res){
 //Create Product
 async function createProduct(req,res){
     try{
-        const {product_name, product_description, price} = req.body;
+        const {productname, product_description, price} = req.body;
 
-        if(!product_name){
+        if(!productname){
             return res.status(400).json({Message: 'Missing required fields'});
         }
-        const[product] = await pool.query('INSERT INTO products (product_name, product_description) VALUES (?,?)', [product_name, product_description]);
+        const[product] = await pool.query('INSERT INTO products (productname, product_description) VALUES (?,?)', [productname, product_description]);
         res.status(201).json({
             Message: 'Product created successfully',
             productId: product.insertId
@@ -399,7 +419,7 @@ async function getAllProducts(req,res){
         const totalProducts = results[0].total;
 
         const [products] = await pool.query(`
-            SELECT p.product_id, p.product_name, p.description,p.product_image, p.is_featured, p.created_at, p.updated_at, c.name as category_name, s.name as supplier_name
+            SELECT p.product_id, p.productname, p.description,p.product_image, p.is_featured, p.created_at, p.updated_at, c.name as category_name, s.name as supplier_name
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.category_id
             LEFT JOIN suppliers s ON p.supplier_id = s.supplier_id
@@ -442,14 +462,14 @@ async function getProductById(req,res){
 
         const [productItems] = await pool.query(`
             SELECT product_item_id, sku, qty_in_stock, product_image, price
-            FROM product_items
+            FROM product_item
             WHERE product_id = ?`, [id]);
 
         const [variations] = await pool.query(`
             SELECT v.variation_id, v.name, vo.variation_option_id, vo.value
-            FROM product_variations pv
-            JOIN variations v ON pv.variation_id = v.variation_id
-            LEFT JOIN variation_options vo ON v.variation_id = vo.variation_id
+            FROM product_variation pv
+            JOIN variation v ON pv.variation_id = v.variation_id
+            LEFT JOIN variation_option vo ON v.variation_id = vo.variation_id
             WHERE pv.product_id = ?`, [id]);
 
         const product = {...products[0], items: productItems, variations: variations};
@@ -484,6 +504,7 @@ async function updateProduct(req,res){
         if(result.affectedRows === 0){
             return res.status(404).json({Message: 'Product not found or no changes made'});
         }
+        res.status(200).json()({Message: 'Product updated successfully'});
     }
     catch(error){
         console.error('ERROR Updating Product:', error);
@@ -497,7 +518,7 @@ async function deleteProduct(req,res){
         const{id} = req.params;
         const[product] = await pool.query('SELECT product_id FROM products WHERE product_id = ?', [id]);
 
-        if(product.lenth === 0){
+        if(product.length === 0){
             return res.status(404).json({Message: 'Product not found'});
         };
         await pool.query('DELETE FROM products WHERE product_id = ?', [id]);
@@ -518,7 +539,7 @@ async function createProductItem(req,res){
         if(!sku||!qty||!price){
             return res.status(400).json({Error: 'Missing required fields'});
         }
-        const[item]= await pool.query('INSERT INTO product_items (product_id,sku,qty,price) VALUES (?,?,?,?)', [productID,sku,qty,price]);
+        const[item]= await pool.query('INSERT INTO product_item (product_id,sku,qty_in_stock,price) VALUES (?,?,?,?)', [productID,sku,qty,price]);
         res.status(201).json({
             Message: 'Product Item created successfully',
             itemID: item.insertId
@@ -533,11 +554,11 @@ async function createProductItem(req,res){
 // Create Variation
 async function createVariation(req,res){
     try{
-        const {type} = req.body;
-        if(!type){
-            return res.json(400).json({Message: 'Missing required fields'});
+        const {name} = req.body;
+        if(!name){
+            return res.status(400).json({Message: 'Missing required fields'});
         }
-        const[variation] = await pool.query('INSERT INTO variations (type) VALUES (?)', [type]);
+        const[variation] = await pool.query('INSERT INTO variation (name) VALUES (?)', [name]);
         res.status(201).json({
             Message: 'Variation created successfully',
             variationId: variation.insertId
@@ -552,15 +573,15 @@ async function createVariation(req,res){
 // Create Variation Options
 async function createVariationOptions(req,res){
     try{
-        const {variationID} = req.params;
-        const {option_value} = req.body;
-        if(!option_value){
+        const {variationId} = req.params;
+        const {value} = req.body;
+        if(!value){
             return res.status(400).json({Message: 'Missing required fields'});
         }
-        const [option] = await pool.query('INSERT INTO variation_options (variation_id,option_value) VALUES (?,?)', [variationID, option_value]);
+        const [option] = await pool.query('INSERT INTO variation_option (variation_id,value) VALUES (?,?)', [variationId, value]);
         res.status(201).json({
             Message: 'Variation Option created successfully',
-            optionID: option.insertID
+            optionID: option.insertId
         });
     }
     catch(error){
@@ -594,7 +615,7 @@ async function productVariation(req,res){
         const {variationID} = req.body;
 
         if(!variationID){
-            return res.status(400).json({MEssage: 'Missing required fields'});
+            return res.status(400).json({Message: 'Missing required fields'});
         }
         const[prodVar] = await pool.query('INSERT INTO product_variations (product_id,variation_id) VALUES (?,?)', [productID, variationID]);
         res.status(201).json({Message: 'Product Variation created successfully'});
@@ -608,11 +629,11 @@ async function productVariation(req,res){
 // Create Category
 async function createCategory(req,res){
     try{
-        const { name, parent_category_id } = req.body;
+        const { name, parent_categories_id } = req.body;
         if(!name){
             return res.status(400).json({Message: 'Missing required fields'});
         }
-        const[category] = await pool.query('INSERT INTO categories (name,parent_category_id) VALUES (?,?)', [name,parent_category_id]);
+        const[category] = await pool.query('INSERT INTO categories (name,parent_categories_id) VALUES (?,?)', [name,parent_categories_id]);
         res.status(201).json({
             Message: 'Category created successfully',
             categoryId: category.insertId
@@ -687,30 +708,30 @@ async function createSupplier(req,res){
 async function addItemToCart(req,res){
     try{
         const user_id = req.user.user_id;
-        const{product_item_id,quantity} = req.body;
+        const{product_item_id,qty} = req.body;
         
-        if(!product_item_id || !quantity){
+        if(!product_item_id || !qty){
             return res.status(400).json({Message: 'Missing required fields'});
         }
-        const [carts] = await pool.query('SELECT * FROM cart WHERE user_id = ?', [user_id]);
+        const [cart] = await pool.query('SELECT * FROM cart WHERE user_id = ?', [user_id]);
         let cart_id;
 
-        if(carts.length === 0){
+        if(cart.length === 0){
             const[newCart] = await pool.query('INSERT INTO cart (user_id) VALUES (?)', [user_id]);
             cart_id = newCart.insertId;
         }
         else{
-            cart_id = carts[0].cart_id;
+            cart_id = cart[0].cart_id;
         }
 
         const[existingItem] = await pool.query('SELECT * FROM cart_items WHERE cart_id = ? AND product_item_id = ?', [cart_id, product_item_id]);
         if(existingItem.length === 0){
-            await pool.query('INSERT INTO cart_items (cart_id, product_item_id, quantity) VALUES (?,?,?)', [cart_id, product_item_id,quantity]);
+            await pool.query('INSERT INTO cart_items (cart_id, product_item_id, qty) VALUES (?,?,?)', [cart_id, product_item_id,qty]);
             res.status(201).json({Message: 'Item added to cart successfully'});
         }
         else{
-            const newQuantity = existingItem[0].quantity + quantity;
-            await pool.query('UPDATE cart_items SET quantity = ? WHERE cart_item_id = ?', [newQuantity, existingItem[0].carts_item_id]);
+            const newQty = existingItem[0].qty + qty;
+            await pool.query('UPDATE cart_items SET qty = ? WHERE cart_item_id = ?', [newQty, existingItem[0].cart_item_id]);
             res.status(200).json({Message: 'Cart Item quantity updated successfully'});
         }
     }
@@ -725,9 +746,9 @@ async function getUserCart(req,res){
     try{
         const user_id = req.user.user_id;
 
-        let [carts] = await pool.query('SELECT cart_id FROM carts WHERE user_id = ?', [user_id]);
+        let [carts] = await pool.query('SELECT cart_id FROM cart WHERE user_id = ?', [user_id]);
         if(carts.length === 0){
-            const [newCart] = await pool.query('INSERT INTO carts (user_id) VALUES (?)', [user_id]);
+            const [newCart] = await pool.query('INSERT INTO cart (user_id) VALUES (?)', [user_id]);
             const cart_id = newCart.insertId;
             return res.status(200).json({
                 Data:{
@@ -830,7 +851,7 @@ async function processPayment(req,res){
         JOIN product_item pi ON ci.product_item_id = pi.product_item_id
         WHERE ci.cart_id = ?
         `;
-        const [totals] = await pool.query(get.items, [cart_id]);
+        const [totals] = await pool.query(get_items, [cart_id]);
         const total_amount = totals[0].total_amount || 0;
 
         if (total_amount <= 0){
@@ -941,9 +962,9 @@ async function stripeWebhook(req,res){
         const failedPayment = event.data.object;
         console.log('Payment Failed:', failedPayment.id)
         await handleFailedPayment(failedPayment);
-    }   
-        res.sendStatus(200).json({recieved: true});
-    };
+    }
+    res.sendStatus(200).json({received: true});
+};
 
 async function handleSuccessfulPayment(paymentIntent){
     let connection;
