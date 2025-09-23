@@ -149,6 +149,8 @@ CREATE TABLE shop_orders(
     shipping_address_id INT NOT NULL,
     payment_status VARCHAR(50),
     order_status_id INT NOT NULL,
+    tracking_number VARCHAR(100) NULL,
+    actual_shipping_cost DECIMAL(10,2) NULL,
     FOREIGN KEY (user_id) REFERENCES users(user_id),
     FOREIGN KEY (promotion_id) REFERENCES promotion(promotion_id),
     FOREIGN KEY (shipping_address_id) REFERENCES address(address_id),
@@ -270,4 +272,23 @@ CREATE TABLE stock_notification(
     request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE
+);
+
+-- Stock Movements for Inventory Tracking
+CREATE TABLE stock_movements (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    product_item_id INT NOT NULL,
+    movement_type ENUM('sale', 'restock', 'adjustment', 'return', 'damaged') NOT NULL,
+    quantity_change INT NOT NULL, -- positive for increases, negative for decreases
+    quantity_before INT NOT NULL,
+    quantity_after INT NOT NULL,
+    reference_id INT NULL, -- order_id for sales, purchase_order_id for restocks, etc.
+    reason VARCHAR(255),
+    created_by INT, -- user_id of who made the change
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (product_item_id) REFERENCES product_item(product_item_id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL,
+    INDEX idx_product_item_id (product_item_id),
+    INDEX idx_movement_type (movement_type),
+    INDEX idx_created_at (created_at)
 );
