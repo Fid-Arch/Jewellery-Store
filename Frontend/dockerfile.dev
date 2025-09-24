@@ -1,0 +1,15 @@
+# Development Dockerfile for Frontend
+FROM node:20-alpine
+
+# Set the working directory
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm install
+
+# Expose the development server port
+EXPOSE 5173
+
+# Keep container running for terminal access
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
