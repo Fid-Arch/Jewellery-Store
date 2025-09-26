@@ -5,6 +5,7 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+require('dotenv').config();
 
 // 2. Initialize Express APP
 const app = express();
@@ -141,7 +142,7 @@ async function deleteRole(req,res) {
 // Register User
 async function registerUser(req,res) {
     try {
-        const { firstName, lastName, email, password } = req.body;
+        const {firstName, lastName, email, password} = req.body;
         if(!firstName || !lastName || !email || !password) {
             return res.status(400).json({Message: 'Missing required fields'});
         }
@@ -2457,7 +2458,7 @@ async function moveWishlistToCart(req,res){
     }
 };
 
-// ESSENTIAL SHIPPING MANAGEMENT FUNCTIONS
+//SHIPPING MANAGEMENT FUNCTIONS
 
 // 1. Australia Post API Integration Helper
 async function calculateAustraliaPostRates(fromPostcode, toPostcode, weight, length = 10, width = 10, height = 10) {
@@ -2876,7 +2877,7 @@ async function trackOrderWithLabel(req, res) {
 
 // SHIPPING ADDRESS MANAGEMENT FUNCTIONS
 
-// 1. Get User's Shipping Addresses
+//  Get User's Shipping Addresses
 async function getUserShippingAddresses(req, res) {
     try {
         const user_id = req.user.user_id;
@@ -2911,7 +2912,7 @@ async function getUserShippingAddresses(req, res) {
     }
 }
 
-// 2. Add New Shipping Address
+//Add New Shipping Address
 async function addShippingAddress(req, res) {
     try {
         const user_id = req.user.user_id;
@@ -2981,7 +2982,7 @@ async function addShippingAddress(req, res) {
     }
 }
 
-// 3. Update Shipping Address
+// Update Shipping Address
 async function updateShippingAddress(req, res) {
     try {
         const user_id = req.user.user_id;
@@ -3060,7 +3061,7 @@ async function updateShippingAddress(req, res) {
     }
 }
 
-// 4. Delete Shipping Address
+// Delete Shipping Address
 async function deleteShippingAddress(req, res) {
     try {
         const user_id = req.user.user_id;
@@ -3250,7 +3251,372 @@ async function validateShippingAddress(req, res) {
         console.error('ERROR Validating Shipping Address:', error);
         res.status(500).json({ Error: 'Error Validating Shipping Address' });
     }
-}
+};
+
+// PROMOTION/DISCOUNT SYSTEM
+
+// Get all active promotions
+async function getActivePromotions(req,res) {
+    try{
+        const [promotions] = await pool.query(`
+            SELECT * FROM promotion 
+            WHERE is_active = TRUE 
+                AND (start_date IS NULL OR start_date <= NOW()) 
+                AND (end_date IS NULL OR end_date >= NOW())
+            ORDER BY discount_rate DESC
+        `);
+        res.status(200).json({
+            Message: 'Active promotions retrieved successfully',
+            promotions: promotions
+        });
+    }
+    catch(error) {
+        console.error("ERROR Fetching Promotions:", error);
+        res.status(500).json({Message: 'Error fetching promotions'});
+    }
+};
+
+// Validate promotion code
+async function validatePromotionCode(req,res) {
+    try{
+        const { promotionCode, userId, cartTotal, cartItems } = req.body;
+        
+        if(!promotionCode || !userId || !cartTotal) {
+            return res.status(400).json({Message: 'Missing required fields'});
+        }
+
+        const validation = await checkPromotionValidity(promotionCode, userId, cartTotal, cartItems);
+        res.status(200).json(validation);
+    }
+    catch(error) {
+        console.error("ERROR Validating Promotion:", error);
+        res.status(500).json({Message: 'Error validating promotion'});
+    }
+};
+
+// Apply promotion to order
+async function applyPromotionToOrder(req,res) {
+    try{
+        const { promotionCode, orderId } = req.body;
+        const userId = req.user?.user_id;
+        
+        if(!promotionCode || !userId || !orderId) {
+            return res.status(400).json({Message: 'Missing required fields'});
+        }
+        // CHECK for user authentication
+        const userCheck = await pool.query('SELECT user_id FROM users WHERE user_id = ?', [userId]);
+        if(userCheck[0].length === 0) {
+            return res.status(401).json({Message: 'User not authenticated'});
+        }
+
+        const result = await processPromotionApplication(promotionCode, userId, orderId);
+        res.status(200).json(result);
+    }
+    catch(error) {
+        console.error("ERROR Applying Promotion:", error);
+        res.status(500).json({Message: 'Error applying promotion'});
+    }
+};
+
+// Admin: Create new promotion
+async function createPromotion(req,res) {
+    try{
+        const {
+            name, description, discountRate, discountType, promotionCode,
+            startDate, endDate, minimumOrderValue, usageLimit,applicableCategories
+        } = req.body;
+        
+        if(!name || !discountRate || !promotionCode) {
+            return res.status(400).json({Message: 'Missing required fields'});
+        }
+
+        const [existingPromotion] = await pool.query('SELECT promotion_id FROM promotion WHERE promotion_code = ?', [promotionCode]);
+        
+        if(existingPromotion.length > 0) {
+            return res.status(400).json({Message: 'Promotion code already exists'});
+        }
+
+        const [newPromotion] = await pool.query(`
+            INSERT INTO promotion (
+                name, description, discount_rate, discount_type, promotion_code,
+                start_date, end_date, minimum_order_value, usage_limit, 
+                applicable_categories, is_active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+        `, [
+            name, description, discountRate, discountType || 'percentage', promotionCode,
+            startDate, endDate, minimumOrderValue || 0, usageLimit, applicableCategories ? JSON.stringify(applicableCategories) : null
+        ]);
+        
+        res.status(201).json({ 
+            Message: 'Promotion created successfully',
+            promotionId: newPromotion.insertId
+        });
+    }
+    catch(error) {
+        console.error("ERROR Creating Promotion:", error);
+        res.status(500).json({Message: 'Error creating promotion'});
+    }
+};
+
+// Admin: Update promotion
+async function updatePromotion(req,res) {
+    try{
+        const promotionId = req.params.id;
+        const {
+            name, description, discountRate, discountType,promotionCode,
+            startDate, endDate, minimumOrderValue, usageLimit, applicableCategories, isActive
+        } = req.body;
+        
+        const [existingPromotion] = await pool.query(
+            'SELECT promotion_id FROM promotion WHERE promotion_id = ?', 
+            [promotionId]
+        );
+        
+        if(existingPromotion.length === 0) {
+            return res.status(404).json({Message: 'Promotion not found'});
+        }
+
+        await pool.query(`
+            UPDATE promotion SET 
+                name = COALESCE(?, name),
+                description = COALESCE(?, description),
+                discount_rate = COALESCE(?, discount_rate),
+                discount_type = COALESCE(?, discount_type),
+                promotion_code = COALESCE(?, promotion_code),
+                start_date = COALESCE(?, start_date),
+                end_date = COALESCE(?, end_date),
+                minimum_order_value = COALESCE(?, minimum_order_value),
+                usage_limit = COALESCE(?, usage_limit),
+                applicable_categories = COALESCE(?, applicable_categories),
+                is_active = COALESCE(?, is_active)
+            WHERE promotion_id = ?
+        `, [
+            name, description, discountRate, discountType, promotionCode,
+            startDate, endDate, minimumOrderValue, usageLimit,
+            applicableCategories ? JSON.stringify(applicableCategories) : null, isActive, promotionId
+        ]);
+        
+        res.status(200).json({Message: 'Promotion updated successfully'});
+    }
+    catch(error) {
+        console.error("ERROR Updating Promotion:", error);
+        res.status(500).json({Message: 'Error updating promotion'});
+    }
+};
+
+// Admin: Delete promotion
+async function deletePromotion(req,res) {
+    try{
+        const promotionId = req.params.id;
+        
+        const [existingPromotion] = await pool.query(
+            'SELECT promotion_id FROM promotion WHERE promotion_id = ?', 
+            [promotionId]
+        );
+        
+        if(existingPromotion.length === 0) {
+            return res.status(404).json({Message: 'Promotion not found'});
+        }
+
+        await pool.query('UPDATE promotion SET is_active = FALSE WHERE promotion_id = ?', [promotionId]);
+        res.status(200).json({Message: 'Promotion deactivated successfully'});
+    }
+    catch(error) {
+        console.error("ERROR Deactivating Promotion:", error);
+        res.status(500).json({Message: 'Error deactivating promotion'});
+    }
+};
+
+// Get promotion statistics (Admin)
+async function getPromotionStats(req,res) {
+    try{
+        const [stats] = await pool.query(`
+            SELECT 
+                p.*,
+                COALESCE(pu.usage_count, 0) as actual_usage,
+                COALESCE(pu.total_discount, 0) as total_discount_given
+            FROM promotion p
+            LEFT JOIN (
+                SELECT 
+                    promotion_id,
+                    COUNT(*) as usage_count,
+                    SUM(
+                        CASE 
+                            WHEN p2.discount_type = 'percentage' 
+                            THEN (so.order_total * p2.discount_rate / 100)
+                            ELSE p2.discount_rate
+                        END
+                    ) as total_discount
+                FROM promotion_usage pu2
+                JOIN promotion p2 ON pu2.promotion_id = p2.promotion_id
+                JOIN shop_orders so ON pu2.order_id = so.shop_order_id
+                GROUP BY promotion_id
+            ) pu ON p.promotion_id = pu.promotion_id
+            ORDER BY p.start_date DESC
+        `);
+        
+        res.status(200).json({
+            Message: 'Promotion statistics retrieved successfully',
+            stats: stats
+        });
+    }
+    catch(error) {
+        console.error("ERROR Fetching Promotion Stats:", error);
+        res.status(500).json({Message: 'Error fetching promotion statistics'});
+    }
+};
+
+// =================== PROMOTION HELPER FUNCTIONS ===================
+
+async function checkPromotionValidity(promotionCode, userId, cartTotal, cartItems = []) {
+    try{
+        // Get promotion details
+        const [promotions] = await pool.query(
+            `SELECT * FROM promotion 
+             WHERE promotion_code = ? AND is_active = TRUE`,
+            [promotionCode]
+        );
+        
+        if(promotions.length === 0) {
+            return { valid: false, Message: 'Invalid promotion code' };
+        }
+        
+        const promotion = promotions[0];
+        
+        // Check if promotion is within date range
+        const now = new Date();
+        if(promotion.start_date && new Date(promotion.start_date) > now) {
+            return { valid: false, Message: 'Promotion has not started yet' };
+        }
+        
+        if(promotion.end_date && new Date(promotion.end_date) < now) {
+            return { valid: false, Message: 'Promotion has expired' };
+        }
+        
+        // Check minimum order value
+        if(promotion.minimum_order_value && cartTotal < promotion.minimum_order_value) {
+            return { 
+                valid: false, 
+                Message: `Minimum order value of $${promotion.minimum_order_value} required` 
+            };
+        }
+        
+        // Check usage limit
+        if(promotion.usage_limit && promotion.usage_count >= promotion.usage_limit) {
+            return { valid: false, Message: 'Promotion usage limit reached' };
+        }
+        
+        // Check if user has already used this promotion
+        const [userUsage] = await pool.query(
+            'SELECT COUNT(*) as count FROM promotion_usage WHERE promotion_id = ? AND user_id = ?',
+            [promotion.promotion_id, userId]
+        );
+        
+        if(userUsage[0].count > 0) {
+            return { valid: false, Message: 'You have already used this promotion' };
+        }
+        
+        // Check category-specific promotions
+        if(promotion.discount_type === 'category_specific' && promotion.applicable_categories) {
+            const applicableCategories = JSON.parse(promotion.applicable_categories);
+            const hasApplicableItems = cartItems.some(item => 
+                applicableCategories.includes(item.category_id)
+            );
+            
+            if(!hasApplicableItems) {
+                return { 
+                    valid: false, 
+                    Message: 'This promotion is not applicable to items in your cart' 
+                };
+            }
+        }
+        
+        // Calculate discount amount
+        let discountAmount = 0;
+        if(promotion.discount_type === 'percentage') {
+            discountAmount = (cartTotal * promotion.discount_rate) / 100;
+        } else if(promotion.discount_type === 'fixed_amount') {
+            discountAmount = promotion.discount_rate;
+        } else if(promotion.discount_type === 'category_specific') {
+            const applicableCategories = JSON.parse(promotion.applicable_categories);
+            const applicableItemsTotal = cartItems
+                .filter(item => applicableCategories.includes(item.category_id))
+                .reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            
+            discountAmount = (applicableItemsTotal * promotion.discount_rate) / 100;
+        }
+        
+        // Ensure discount doesn't exceed cart total
+        discountAmount = Math.min(discountAmount, cartTotal);
+        
+        return {
+            valid: true,
+            promotion: promotion,
+            discountAmount: parseFloat(discountAmount.toFixed(2)),
+            finalTotal: parseFloat((cartTotal - discountAmount).toFixed(2)),
+            Message: 'Promotion applied successfully'
+        };
+        
+    }
+    catch(error) {
+        console.error("ERROR Validating Promotion Code:", error);
+        return { valid: false, Message: 'Error validating promotion' };
+    }
+};
+
+async function processPromotionApplication(promotionCode, userId, orderId) {
+    const connection = await pool.getConnection();
+    
+    try{
+        await connection.beginTransaction();
+        
+        // Get promotion details
+        const [promotions] = await connection.query(
+            'SELECT * FROM promotion WHERE promotion_code = ? AND is_active = TRUE', [promotionCode]
+        );
+        
+        if(promotions.length === 0) {
+            throw new Error('Invalid promotion code');
+        }
+        
+        const promotion = promotions[0];
+        
+        // Update order with promotion
+        await connection.query(
+            'UPDATE shop_orders SET promotion_id = ? WHERE shop_order_id = ?', [promotion.promotion_id, orderId]
+        );
+        
+        // Record promotion usage
+        await connection.query(
+            'INSERT INTO promotion_usage (promotion_id, user_id, order_id) VALUES (?, ?, ?)', [promotion.promotion_id, userId, orderId]
+        );
+        
+        // Update promotion usage count
+        await connection.query(
+            'UPDATE promotion SET usage_count = usage_count + 1 WHERE promotion_id = ?', [promotion.promotion_id]
+        );
+        
+        await connection.commit();
+        
+        return {
+
+            Message: 'Promotion applied to order successfully',
+            promotionName: promotion.name,
+            discountRate: promotion.discount_rate
+        };
+        
+    }
+    catch(error) {
+        await connection.rollback();
+        throw error;
+    }
+    finally {
+        connection.release();
+    }
+};
+
+// Email Notification Function
+
 // 6. API  ROUTES
 app.get('/', (req,res) => {
     res.send('Node.js and MYSQL API is running');
@@ -3326,6 +3692,15 @@ app.put('/shipping/addresses/:addressId', authenticateJWT, updateShippingAddress
 app.delete('/shipping/addresses/:addressId', authenticateJWT, deleteShippingAddress);
 app.put('/shipping/addresses/:addressId/default', authenticateJWT, setDefaultShippingAddress);
 app.post('/shipping/validate-address', validateShippingAddress);
+
+// =================== PROMOTION ROUTES ===================
+app.get('/api/promotions', getActivePromotions);
+app.post('/api/promotions/validate', validatePromotionCode);
+app.post('/api/promotions/apply', applyPromotionToOrder);
+app.post('/api/admin/promotions', authenticateJWT, authorizeAdminJWT, createPromotion);
+app.put('/api/admin/promotions/:id', authenticateJWT, authorizeAdminJWT, updatePromotion);
+app.delete('/api/admin/promotions/:id', authenticateJWT, authorizeAdminJWT, deletePromotion);
+app.get('/api/admin/promotions/stats', authenticateJWT, authorizeAdminJWT, getPromotionStats);
 
 //7. RUN
 app.listen(3000,()=>{
