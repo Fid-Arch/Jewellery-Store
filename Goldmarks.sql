@@ -110,6 +110,12 @@ CREATE TABLE promotion(
     start_date TIMESTAMP,
     end_date TIMESTAMP,
     promotion_code VARCHAR(50) UNIQUE
+    discount_type ENUM('percentage', 'fixed_amount', 'category_specific') DEFAULT 'percentage',
+    minimum_order_value DECIMAL(10,2) DEFAULT 0,
+    usage_limit INT DEFAULT NULL,
+    usage_count INT DEFAULT 0,
+    is_active BOOLEAN DEFAULT TRUE,
+    applicable_categories TEXT NULL;
 );
 
 -- Wishlist
@@ -291,4 +297,16 @@ CREATE TABLE stock_movements (
     INDEX idx_product_item_id (product_item_id),
     INDEX idx_movement_type (movement_type),
     INDEX idx_created_at (created_at)
+);
+
+-- Create promotion usage tracking table
+CREATE TABLE promotion_usage (
+    usage_id INT PRIMARY KEY AUTO_INCREMENT,
+    promotion_id INT NOT NULL,
+    user_id INT NOT NULL,
+    order_id INT NOT NULL,
+    used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (promotion_id) REFERENCES promotion(promotion_id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id),
+    FOREIGN KEY (order_id) REFERENCES shop_orders(shop_order_id)
 );
