@@ -1,15 +1,15 @@
 // 1. Import Dependencies
+require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-require('dotenv').config();
 
 // 2. Initialize Express APP
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 // 3. Middleware
 app.use(cors());
@@ -55,7 +55,7 @@ function authenticateJWT(req,res,next) {
             return res.status(401).json({Message: 'Missing Authorization Token'});
         }
 
-        jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+        jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key', (err, decoded) => {
             if (err) {
                 return res.status(403).json({Message: 'Invalid Token'});
             }
@@ -65,11 +65,10 @@ function authenticateJWT(req,res,next) {
             };
             next();
         });
-        res.status(200).json({Message: 'Token Authenticated Successfully'});
     }
     catch(error){
         console.error('ERROR Authenticating JWT:', error);
-        res.status(400).json({Message: 'Error Authenticating JWT'});
+        res.status(500).json({Message: 'Error Authenticating JWT'});
     }
 };
 
@@ -254,13 +253,23 @@ async function logoutUser(req,res) {
             return res.status(400).json({Message: 'Missing Token'});
         }
 
+        // Verify the token belongs to the user
         const decoded = jwt.decode(sessionToken);
-        const expiresAt = decoded.exp * 1000;
+        if(decoded.user_id !== user_id) {
+            return res.status(403).json({Message: 'Token does not belong to user'});
+        }
+
+        // For now, we'll just respond with success
+        // In a production app, you'd typically blacklist the token
+        res.status(200).json({
+            Message: 'User logged out successfully',
+            timestamp: new Date().toISOString()
+        });
 
     }
     catch(error){
         console.error("ERROR Logging out User:", error);
-        res.status(500).send('Error Logging out User');
+        res.status(500).json({Message: 'Error Logging out User'});
     }
 };
 
@@ -392,20 +401,34 @@ async function userAddress (req,res){
 //Create Product
 async function createProduct(req,res){
     try{
-        const {productname, product_description, price} = req.body;
+        const {productname, description, product_image, is_featured = true, category_id, supplier_id} = req.body;
 
-        if(!productname){
-            return res.status(400).json({Message: 'Missing required fields'});
+        if(!productname || !description){
+            return res.status(400).json({Message: 'Missing required fields: productname and description are required'});
         }
-        const[product] = await pool.query('INSERT INTO products (productname, product_description) VALUES (?,?)', [productname, product_description]);
+        
+        const[product] = await pool.query(`
+            INSERT INTO products (productname, description, product_image, is_featured, category_id, supplier_id) 
+            VALUES (?,?,?,?,?,?)`, 
+            [productname, description, product_image, is_featured, category_id, supplier_id]);
+            
         res.status(201).json({
             Message: 'Product created successfully',
-            productId: product.insertId
+            productId: product.insertId,
+            product: {
+                id: product.insertId,
+                productname,
+                description,
+                product_image,
+                is_featured,
+                category_id,
+                supplier_id
+            }
         });
     }
     catch(error){
         console.error('ERROR Creating Product:', error);
-        res.status(500).send('Error Inserting data into the database');
+        res.status(500).json({Message: 'Error creating product', error: error.message});
     }
 };
 
