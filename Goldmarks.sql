@@ -109,13 +109,13 @@ CREATE TABLE promotion(
     discount_rate DECIMAL(5,2),
     start_date TIMESTAMP,
     end_date TIMESTAMP,
-    promotion_code VARCHAR(50) UNIQUE
+    promotion_code VARCHAR(50) UNIQUE,
     discount_type ENUM('percentage', 'fixed_amount', 'category_specific') DEFAULT 'percentage',
     minimum_order_value DECIMAL(10,2) DEFAULT 0,
     usage_limit INT DEFAULT NULL,
     usage_count INT DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
-    applicable_categories TEXT NULL;
+    applicable_categories TEXT NULL
 );
 
 -- Wishlist
@@ -310,3 +310,7 @@ CREATE TABLE promotion_usage (
     FOREIGN KEY (user_id) REFERENCES users(user_id),
     FOREIGN KEY (order_id) REFERENCES shop_orders(shop_order_id)
 );
+
+-- Insert data into roles
+INSERT INTO roles (role_name)
+VALUES (CUSTOMER), (ADMIN);
