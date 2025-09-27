@@ -7,6 +7,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const notificationService = require('./services/notificationService');
+const { pool } = require('..');
+const notificationService = require('./services/notificationService');
 
 // 2. Initialize Express APP
 const app = express();
@@ -1000,18 +1002,48 @@ async function createOrder(req,res){
 
         await connection.commit();
 
-        const user = {
-            first_name: userDetails[0].firstName,
-            last_name: userDetails[0].lastName,
-            email: userDetails[0].email,
-           phone: userDetails[0].phoneNumber,
-            email_notifications: userDetails[0].email_notifications,
-            sms_notifications: userDetails[0].sms_notifications
-        };
-        res.status(201).json({
-            Message: 'Order Created Successfully',
-            shop_order_id: shop_order_id
-        });
+        // Send order confirmation email and SMS
+        try {
+            // Get user details for notifications
+            const [userDetails] = await pool.query(
+                'SELECT firstName, lastName, email, phoneNumber, email_notifications, sms_notifications FROM users WHERE user_id = ?', 
+                [user_id]
+            );
+            
+            if (userDetails.length > 0) {
+                const user = {
+                    first_name: userDetails[0].firstName,
+                    last_name: userDetails[0].lastName,
+                    email: userDetails[0].email,
+                    phone: userDetails[0].phone,
+                    email_notifications: userDetails[0].email_notifications,
+                    sms_notifications: userDetails[0].sms_notifications
+                };
+
+                // Prepare order details for email
+                const orderDetails = {
+                    order_id: shop_order_id,
+                    total_amount: total_amount,
+                    created_at: new Date(),
+                    items: items.map(item => ({
+                        name: `Product Item #${item.product_item_id}`, // You might want to get actual product names
+                        quantity: item.qty,
+                        price: item.price
+                    }))
+                };
+
+                // Send order confirmation email
+                await notificationService.sendOrderConfirmation(user, orderDetails);
+                console.log('Order confirmation email sent for order:', shop_order_id);
+
+                // Send SMS notification
+                await notificationService.sendOrderStatusSMS(user, shop_order_id, 'processing');
+                console.log('Order SMS notification sent for order:', shop_order_id);
+            }
+        } catch (notificationError) {
+            console.error('Failed to send order notifications:', notificationError);
+            // Don't fail the order if notifications fail
+        }
     }
     catch(error){
         if(connection){
