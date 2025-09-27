@@ -7,8 +7,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const notificationService = require('./services/notificationService');
-const { pool } = require('..');
-const notificationService = require('./services/notificationService');
+
+
 
 // 2. Initialize Express APP
 const app = express();
@@ -1015,7 +1015,7 @@ async function createOrder(req,res){
                     first_name: userDetails[0].firstName,
                     last_name: userDetails[0].lastName,
                     email: userDetails[0].email,
-                    phone: userDetails[0].phone,
+                    phone: userDetails[0].phoneNumber,
                     email_notifications: userDetails[0].email_notifications,
                     sms_notifications: userDetails[0].sms_notifications
                 };
@@ -3898,7 +3898,7 @@ async function subscribeBackInStock(req,res) {
         } else {
             // Create new notification
             await pool.query(
-                'INSERT INTO stock_notification (user_id, product_id, product_item_id, email, phone, email_notification, sms_notification) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO stock_notification (user_id, product_id, product_item_id, email, phoneNumber, email_notification, sms_notification) VALUES (?, ?, ?, ?, ?, ?, ?)',
                 [user_id, product_id, product_item_id, user.email, user.phoneNumber, email_notification, sms_notification]
             );
         }
