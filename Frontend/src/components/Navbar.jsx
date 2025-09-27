@@ -5,7 +5,7 @@ import { useStore } from "../context/StoreContext";
 import LuxuryButton from "./LuxuryButton";
 
 function Navbar() {
-  const { cartCount, wishlistCount, user, logoutUser } = useStore();
+  const { cartCount, wishlistCount, user, logout } = useStore();
   const navigate = useNavigate();
 
   const linkCls = ({ isActive }) =>
@@ -13,7 +13,7 @@ function Navbar() {
     (isActive ? "text-gold-400" : "");
 
   const handleLogout = () => {
-    logoutUser();
+    logout();
     navigate("/");
   };
 
