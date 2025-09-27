@@ -16,6 +16,9 @@ CREATE TABLE users (
     password_hash VARCHAR(255),
     roles_id INT DEFAULT 1,
     createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    email_notifications BOOLEAN DEFAULT TRUE,
+    sms_notifications BOOLEAN DEFAULT TRUE,
+    marketing_emails BOOLEAN DEFAULT FALSE;
     FOREIGN KEY (roles_id) REFERENCES roles(roles_id)
 );
 
@@ -269,16 +272,25 @@ CREATE TABLE content_pages(
     FOREIGN KEY (author_id) REFERENCES users(user_id)
 );
 
--- MISCELLANEOUS
+-- Stock Notificaion
 CREATE TABLE stock_notification(
     stock_notification_id INT PRIMARY KEY AUTO_INCREMENT,
     user_id INT NOT NULL,
     product_id INT NOT NULL,
-    notified BOOLEAN DEFAULT FALSE,
-    request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    product_item_id INT NULL, -- Specific product variant (optional)
+    email VARCHAR(255) NOT NULL,
+    phone VARCHAR(20) NULL,
+    email_notification BOOLEAN DEFAULT TRUE,
+    sms_notification BOOLEAN DEFAULT FALSE,
+    status ENUM('active', 'notified', 'cancelled') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    notified_at TIMESTAMP NULL,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE
+    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE,
+    FOREIGN KEY (product_item_id) REFERENCES product_item(product_item_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_user_product (user_id, product_id, product_item_id)
 );
+
 
 -- Stock Movements for Inventory Tracking
 CREATE TABLE stock_movements (
@@ -314,3 +326,7 @@ CREATE TABLE promotion_usage (
 -- Insert data into roles
 INSERT INTO roles (role_name)
 VALUES (CUSTOMER), (ADMIN);
+
+-- CREATE index
+CREATE INDEX idx_stock_notifications_status ON stock_notifications(status);
+CREATE INDEX idx_stock_notifications_product ON stock_notifications(product_id, status);
