@@ -79,7 +79,7 @@ function authenticateJWT(req,res,next) {
 
 // Admin authorization
 function authorizeAdminJWT(req,res,next) {
-    if (req.user.role !== 'admin') {
+    if (req.user.role.toLowerCase() !== 'admin') {
         return res.status(403).json({Message: 'Forbidden'});
     }
     next();

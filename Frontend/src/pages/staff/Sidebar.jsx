@@ -25,13 +25,13 @@ function Sidebar() {
       {/* Logo */}
       <div className="p-6 border-b border-yellow-200">
         <h1 className="text-2xl font-extrabold bg-gradient-to-r from-yellow-500 to-yellow-700 bg-clip-text text-transparent">
-          Goldmarks {user?.role === "staff" ? "Staff" : "Admin"}
+          Goldmarks {user?.role.toLowerCase() === "staff" ? "Staff" : "Admin"}
         </h1>
       </div>
 
       {/* Links */}
       <nav className="p-4 flex flex-col gap-2">
-        {user?.role === "ADMIN" ? (
+        {user?.role.toLowerCase() === "admin" ? (
           <>
             <NavLink to="/admin" end className={linkClass}>
               <LayoutDashboard size={20} /> Dashboard

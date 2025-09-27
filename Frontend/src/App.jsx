@@ -13,7 +13,6 @@ import Footer from "./components/Footer";
 import Home from "./pages/Home";
 import CustomerLogin from "./pages/customer/Login";
 import CustomerRegister from "./pages/customer/Register";
-import AdminLogin from "./pages/admin/Login";
 import AdminRegister from "./pages/admin/Register";
 import ExclusiveShowcase from "./pages/ExclusiveShowcase";
 import Cart from "./pages/customer/Cart";
@@ -53,8 +52,8 @@ function App() {
   // Handle role-based redirect after login
   const getRedirectPath = () => {
     if (!user) return "/";
-    if (user.role === "admin") return "/admin";
-    if (user.role === "staff") return "/staff/orders";
+    if (user.role.toLowerCase() === "admin") return "/admin";
+    if (user.role.toLowerCase() === "staff") return "/staff/orders";
     return "/";
   };
 
@@ -71,10 +70,6 @@ function App() {
         <Route
           path="/register"
           element={user ? <Navigate to="/" /> : <CustomerRegister />}
-        />
-        <Route
-          path="/admin/login"
-          element={user ? <Navigate to={getRedirectPath()} /> : <AdminLogin />}
         />
         <Route
           path="/admin/register"
@@ -110,41 +105,41 @@ function App() {
         <Route
           path="/admin"
           element={
-            user?.role === "ADMIN" ? <AdminDashboard /> : <Navigate to="/" />
+            user?.role.toLowerCase() === "admin" ? <AdminDashboard /> : <Navigate to="/" />
           }
         />
         <Route
           path="/admin/products"
-          element={user?.role === "ADMIN" ? <Products /> : <Navigate to="/" />}
+          element={user?.role.toLowerCase() === "admin" ? <Products /> : <Navigate to="/" />}
         />
         <Route
           path="/admin/orders"
-          element={user?.role === "ADMIN" ? <Orders /> : <Navigate to="/" />}
+          element={user?.role.toLowerCase() === "admin" ? <Orders /> : <Navigate to="/" />}
         />
         <Route
           path="/admin/users"
-          element={user?.role === "ADMIN" ? <Users /> : <Navigate to="/" />}
+          element={user?.role.toLowerCase() === "admin" ? <Users /> : <Navigate to="/" />}
         />
         <Route
           path="/admin/reports"
-          element={user?.role === "ADMIN" ? <Reports /> : <Navigate to="/" />}
+          element={user?.role.toLowerCase() === "admin" ? <Reports /> : <Navigate to="/" />}
         />
         <Route
           path="/admin/settings"
-          element={user?.role === "ADMIN" ? <Settings /> : <Navigate to="/" />}
+          element={user?.role.toLowerCase() === "admin" ? <Settings /> : <Navigate to="/" />}
         />
 
         {/* Staff routes */}
         <Route
           path="/staff/orders"
           element={
-            user?.role === "staff" ? <StaffOrders /> : <Navigate to="/" />
+            user?.role.toLowerCase() === "staff" ? <StaffOrders /> : <Navigate to="/" />
           }
         />
         <Route
           path="/staff/reviews"
           element={
-            user?.role === "staff" ? <StaffReviews /> : <Navigate to="/" />
+            user?.role.toLowerCase() === "staff" ? <StaffReviews /> : <Navigate to="/" />
           }
         />
 
