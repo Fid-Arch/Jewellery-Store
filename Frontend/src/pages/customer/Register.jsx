@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom"
 import { registerUser } from "../../utils/api";
 
-export default function Register() {
+export default function CustomerRegister() {
   const navigate = useNavigate()
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", password: "" });
   const [error, setError] = useState("");
@@ -16,7 +16,13 @@ export default function Register() {
     // Example future integration (uncomment/adjust):
     try {
       const normalizedEmail = form.email.trim().toLowerCase();
-      const result = await registerUser({ ...form, email: normalizedEmail });
+      const result = await registerUser({
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        email: normalizedEmail,
+        password: form.password,
+        roles_id: 1
+      });
       // Auto-login or navigate to login
       navigate("/login");
     } catch (err) {

@@ -11,8 +11,10 @@ import { StoreContext } from "./context/StoreContext";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import Home from "./pages/Home";
-import Login from "./pages/customer/Login";
-import Register from "./pages/customer/Register";
+import CustomerLogin from "./pages/customer/Login";
+import CustomerRegister from "./pages/customer/Register";
+import AdminLogin from "./pages/admin/Login";
+import AdminRegister from "./pages/admin/Register";
 import ExclusiveShowcase from "./pages/ExclusiveShowcase";
 import Cart from "./pages/customer/Cart";
 import Checkout from "./pages/customer/Checkout";
@@ -64,11 +66,19 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route
           path="/login"
-          element={user ? <Navigate to={getRedirectPath()} /> : <Login />}
+          element={user ? <Navigate to={getRedirectPath()} /> : <CustomerLogin />}
         />
         <Route
           path="/register"
-          element={user ? <Navigate to="/" /> : <Register />}
+          element={user ? <Navigate to="/" /> : <CustomerRegister />}
+        />
+        <Route
+          path="/admin/login"
+          element={user ? <Navigate to={getRedirectPath()} /> : <AdminLogin />}
+        />
+        <Route
+          path="/admin/register"
+          element={user ? <Navigate to="/" /> : <AdminRegister />}
         />
 
         {/* Customer routes */}
@@ -100,28 +110,28 @@ function App() {
         <Route
           path="/admin"
           element={
-            user?.role === "admin" ? <AdminDashboard /> : <Navigate to="/" />
+            user?.role === "ADMIN" ? <AdminDashboard /> : <Navigate to="/" />
           }
         />
         <Route
           path="/admin/products"
-          element={user?.role === "admin" ? <Products /> : <Navigate to="/" />}
+          element={user?.role === "ADMIN" ? <Products /> : <Navigate to="/" />}
         />
         <Route
           path="/admin/orders"
-          element={user?.role === "admin" ? <Orders /> : <Navigate to="/" />}
+          element={user?.role === "ADMIN" ? <Orders /> : <Navigate to="/" />}
         />
         <Route
           path="/admin/users"
-          element={user?.role === "admin" ? <Users /> : <Navigate to="/" />}
+          element={user?.role === "ADMIN" ? <Users /> : <Navigate to="/" />}
         />
         <Route
           path="/admin/reports"
-          element={user?.role === "admin" ? <Reports /> : <Navigate to="/" />}
+          element={user?.role === "ADMIN" ? <Reports /> : <Navigate to="/" />}
         />
         <Route
           path="/admin/settings"
-          element={user?.role === "admin" ? <Settings /> : <Navigate to="/" />}
+          element={user?.role === "ADMIN" ? <Settings /> : <Navigate to="/" />}
         />
 
         {/* Staff routes */}

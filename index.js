@@ -141,7 +141,7 @@ async function deleteRole(req,res) {
 // Register User
 async function registerUser(req,res) {
     try {
-        const {firstName, lastName, email, password} = req.body;
+        const {firstName, lastName, email, password, roles_id} = req.body;
         if(!firstName || !lastName || !email || !password) {
             return res.status(400).json({Message: 'Missing required fields'});
         }
@@ -152,7 +152,7 @@ async function registerUser(req,res) {
         const saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS) || 11;
         const password_hash = await bcrypt.hash(password, saltRounds);
 
-        const [newUser] = await pool.query('INSERT INTO users (firstName,lastName,email,password_hash) VALUES (?,?,?,?)', [firstName, lastName, email, password_hash]);
+        const [newUser] = await pool.query('INSERT INTO users (firstName,lastName,email,password_hash,roles_id) VALUES (?,?,?,?,?)', [firstName, lastName, email, password_hash, roles_id]);
 
         res.status(201).json({
             Message: 'User created successfully',
@@ -162,6 +162,7 @@ async function registerUser(req,res) {
                 firstName,
                 lastName,
                 email,
+                roles_id
             }
         });
     }
@@ -174,6 +175,7 @@ async function registerUser(req,res) {
 // User Login
 async function loginUser(req,res) {
     try {
+        console.log("login liao")
         const {email,password} = req.body
 
         if(!email || !password) {
@@ -184,7 +186,7 @@ async function loginUser(req,res) {
             FROM users u
             LEFT JOIN roles r ON u.roles_id = r.roles_id
             WHERE u.email = ?`, [email]);
-
+        console.log("every", users)
         if (users.length === 0) {
             return res.status(401).json({Message: 'Invalid Email or Password'});
         }

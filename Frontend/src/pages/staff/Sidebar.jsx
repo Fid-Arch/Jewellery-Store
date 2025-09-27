@@ -31,7 +31,7 @@ function Sidebar() {
 
       {/* Links */}
       <nav className="p-4 flex flex-col gap-2">
-        {user?.role === "admin" ? (
+        {user?.role === "ADMIN" ? (
           <>
             <NavLink to="/admin" end className={linkClass}>
               <LayoutDashboard size={20} /> Dashboard
