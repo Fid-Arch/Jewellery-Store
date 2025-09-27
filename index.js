@@ -13,6 +13,11 @@ const port = process.env.PORT || 3000;
 
 // 3. Middleware
 app.use(cors());
+
+// Raw body parser for Stripe webhooks (must be before express.json())
+app.use('/webhook/stripe', express.raw({ type: 'application/json' }));
+
+// Regular JSON parser for all other routes
 app.use(express.json());
 
 // 4.Database Connection Configuration
@@ -866,7 +871,7 @@ async function processPayment(req,res){
     try{
         const user_id = req.user.user_id;
 
-        const [carts] = await pool.query('SELECT cart_id FROM carts WHERE user_id = ?', [user_id]);
+        const [carts] = await pool.query('SELECT cart_id FROM cart WHERE user_id = ?', [user_id]);
         if(carts.length === 0){
             return res.status(404).json({Message: 'No Active Cart Found for the User'});
         }
@@ -915,7 +920,7 @@ async function createOrder(req,res){
         connection = await pool.getConnection();
         await connection.beginTransaction();
 
-        const [carts] = await connection.query('SELECT cart_id FROM carts WHERE user_id = ?', [user_id]);
+        const [carts] = await connection.query('SELECT cart_id FROM cart WHERE user_id = ?', [user_id]);
         if(carts.length === 0){
             await connection.rollback();
             return res.status(404).json({Message: 'No active cart found for the user'});
@@ -933,7 +938,7 @@ async function createOrder(req,res){
             await connection.rollback();
             return res.status(400).json({Message: 'Cart is Empty'});
         }   
-        const total_amount = items.reduce((total, item) => total + (item.price * item.quantity), 0);
+        const total_amount = items.reduce((total, item) => total + (item.price * item.qty), 0);
 
         const order = 'INSERT INTO shop_orders (user_id, total_amount, shipping_method, shipping_address, transaction_id, payment_status, order_status) VALUES (?,?,?,?,?,?,?)';
         const orderValues = [user_id, total_amount, shipping_method, shipping_address, process_payment_id, 'Pending', 1];
@@ -944,8 +949,8 @@ async function createOrder(req,res){
         await connection.query(payment, [shop_order_id, total_amount, 'Stripe', 'Pending', process_payment_id]);
         
         //Record into the orderline
-        const orderline = 'INSERT INTO order_line (shop_order_id, product_item_id, quantity, price) VALUES (?,?,?,?)';
-        const orderlinevalues = items.map(item => [shop_order_id, item.product_item_id, item.quantity, item.price]);
+        const orderline = 'INSERT INTO order_line (shop_order_id, product_item_id, qty, price) VALUES (?,?,?,?)';
+        const orderlinevalues = items.map(item => [shop_order_id, item.product_item_id, item.qty, item.price]);
         await connection.query(orderline, [orderlinevalues]);
 
         // Record stock movements for each ordered item
@@ -1002,16 +1007,25 @@ async function stripeWebhook(req,res){
         console.error(`ERROR Verifying Stripe Webhook: ${error.message}`);
         return res.status(400).send(`Webhook Error: ${error.message}`);
     }
-    if(event.type === 'payment_intent.succeeded'){
-        const paymentIntent = event.data.object;
-        console.log('Payment Succeeded:', paymentIntent.id);
-        await handleSuccessfulPayment(paymentIntent);
-    }else{
-        const failedPayment = event.data.object;
-        console.log('Payment Failed:', failedPayment.id)
-        await handleFailedPayment(failedPayment);
+    
+    try {
+        if(event.type === 'payment_intent.succeeded'){
+            const paymentIntent = event.data.object;
+            console.log('Payment Succeeded:', paymentIntent.id);
+            await handleSuccessfulPayment(paymentIntent);
+        } else if(event.type === 'payment_intent.payment_failed'){
+            const failedPayment = event.data.object;
+            console.log('Payment Failed:', failedPayment.id);
+            await handleFailedPayment(failedPayment);
+        } else {
+            console.log('Unhandled webhook event type:', event.type);
+        }
+        
+        res.status(200).json({received: true, eventType: event.type});
+    } catch (error) {
+        console.error('Webhook processing error:', error);
+        res.status(500).json({error: 'Webhook processing failed'});
     }
-    res.sendStatus(200).json({received: true});
 };
 
 async function handleSuccessfulPayment(paymentIntent){
@@ -1023,11 +1037,11 @@ async function handleSuccessfulPayment(paymentIntent){
         const updateOrder = 'UPDATE shop_orders SET payment_status = "Paid", order_status = ? WHERE transaction_id = ?';
         await connection.query(updateOrder, [2,paymentIntent.id])
 
-        const updatePayment = 'UPDATE payments SET payment_status = "Paid" WHERE transaction_id = ?';
+        const updatePayment = 'UPDATE payment SET payment_status = "Paid" WHERE transaction_id = ?';
         await connection.query(updatePayment, [paymentIntent.id]);
 
         const getCart = `
-        SELECT c.cart_id FROM carts c
+        SELECT c.cart_id FROM cart c
         JOIN users u ON c.user_id = u.user_id
         JOIN shop_orders so ON u.user_id = so.user_id
         WHERE so.transaction_id = ?
@@ -1039,19 +1053,76 @@ async function handleSuccessfulPayment(paymentIntent){
             const deleteCartItems = 'DELETE FROM cart_items WHERE cart_id = ?';
             await connection.query(deleteCartItems, [cart_id]);
         }
+        
+        // Get user email for order confirmation (if needed later)
+        const [orderInfo] = await connection.query(`
+            SELECT u.email, u.firstName, so.shop_order_id 
+            FROM shop_orders so
+            JOIN users u ON so.user_id = u.user_id
+            WHERE so.transaction_id = ?
+        `, [paymentIntent.id]);
+        
         await connection.commit();
         console.log(`Order and Payment records updated for Transaction ID: ${paymentIntent.id}`);
+        
+        // TODO: Send order confirmation email when email system is implemented
+        if(orderInfo.length > 0) {
+            console.log(`Order confirmation needed for: ${orderInfo[0].email}`);
         }
-    catch(error){
+        
+    } catch(error){
         if(connection){
             await connection.rollback();
             console.error('ERROR Handling Successful Payment:', error);
         }
-    }
-    finally{
+        throw error; // Re-throw to be caught by webhook handler
+    } finally{
         if(connection) connection.release();
     }       
 };
+
+// Add missing handleFailedPayment function
+async function handleFailedPayment(paymentIntent) {
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+
+        // Update order status to failed
+        await connection.query(
+            'UPDATE shop_orders SET payment_status = "Failed", order_status = ? WHERE transaction_id = ?',
+            [5, paymentIntent.id]
+        );
+
+        // Update payment record
+        await connection.query(
+            'UPDATE payment SET payment_status = "Failed" WHERE transaction_id = ?',
+            [paymentIntent.id]
+        );
+        // Get user email for notification
+        const [orderInfo] = await connection.query(`
+            SELECT u.email, u.firstName, so.shop_order_id 
+            FROM shop_orders so
+            JOIN users u ON so.user_id = u.user_id
+            WHERE so.transaction_id = ?
+        `, [paymentIntent.id]);
+
+        await connection.commit();
+        console.log(`Payment failed for Order: ${orderInfo[0]?.shop_order_id}, Transaction ID: ${paymentIntent.id}`);
+        
+        // TODO: Send payment failed email when email system is implemented
+        if (orderInfo.length > 0) {
+            console.log(`Payment failed notification needed for: ${orderInfo[0].email}`);
+        }
+
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error('Error handling failed payment:', error);
+        throw error; // Re-throw to be caught by webhook handler
+    } finally {
+        if (connection) connection.release();
+    }
+};    
 
 //Get User Orders
 async function getUserOrders(req,res){
@@ -3657,6 +3728,9 @@ app.post('/auth/register', registerUser);
 app.post('/auth/login', loginUser);
 app.get('/users/:id', getUserProfile);
 
+// Stripe webhook route (no authentication needed)
+app.post('/webhook/stripe', stripeWebhook);
+
 // Product routes
 app.get('/products', getAllProducts);
 app.get('/products/:id', getProductById);
@@ -3718,15 +3792,29 @@ app.delete('/shipping/addresses/:addressId', authenticateJWT, deleteShippingAddr
 app.put('/shipping/addresses/:addressId/default', authenticateJWT, setDefaultShippingAddress);
 app.post('/shipping/validate-address', validateShippingAddress);
 
-// =================== PROMOTION ROUTES ===================
+// CART ROUTES API Routes
+app.post('/cart/items', authenticateJWT, addItemToCart);
+app.get('/cart', authenticateJWT, getUserCart);
+app.patch('/cart/items/:cartItemId', authenticateJWT, updateCartItem);
+app.delete('/cart/items/:cartItemId', authenticateJWT, removeCartItem);
+app.delete('/cart', authenticateJWT, clearCart);
+
+// PAYMENT & ORDER API Routes
+app.post('/payment/process', authenticateJWT, processPayment);
+app.post('/orders', authenticateJWT, createOrder);
+app.get('/orders', authenticateJWT, getUserOrders);
+app.get('/orders/:orderId', authenticateJWT, getOrderById);
+
+// PROMOTION API Routes 
 app.get('/api/promotions', getActivePromotions);
 app.post('/api/promotions/validate', validatePromotionCode);
 app.post('/api/promotions/apply', applyPromotionToOrder);
+
+// Admin API Routes
 app.post('/api/admin/promotions', authenticateJWT, authorizeAdminJWT, createPromotion);
 app.put('/api/admin/promotions/:id', authenticateJWT, authorizeAdminJWT, updatePromotion);
 app.delete('/api/admin/promotions/:id', authenticateJWT, authorizeAdminJWT, deletePromotion);
 app.get('/api/admin/promotions/stats', authenticateJWT, authorizeAdminJWT, getPromotionStats);
-
 //7. RUN
 app.listen(3000,()=>{
     console.log(`Server is running on port ${port}`)
