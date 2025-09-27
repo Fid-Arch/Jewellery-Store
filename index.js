@@ -6,6 +6,7 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const notificationService = require('./services/notificationService');
 
 // 2. Initialize Express APP
 const app = express();
@@ -158,6 +159,25 @@ async function registerUser(req,res) {
         const password_hash = await bcrypt.hash(password, saltRounds);
 
         const [newUser] = await pool.query('INSERT INTO users (firstName,lastName,email,password_hash,roles_id) VALUES (?,?,?,?,?)', [firstName, lastName, email, password_hash, roles_id]);
+
+        // Send welcome email to new user
+        const userForEmail = {
+            user_id: newUser.insertId,
+            first_name: firstName,
+            last_name: lastName,
+            email: email,
+            email_notifications: true, // New users have email notifications enabled by default
+            sms_notifications: true,
+            marketing_emails: false
+        };
+
+        try {
+            await notificationService.sendWelcomeEmail(userForEmail);
+            console.log('Welcome email sent successfully to:', email);
+        } catch (emailError) {
+            console.error('Failed to send welcome email:', emailError);
+            // Don't fail registration if email fails
+        }
 
         res.status(201).json({
             Message: 'User created successfully',
@@ -850,7 +870,7 @@ async function removeCartItem(req,res){
 async function clearCart(req,res){
     try{
         const user_id = req.user.user_id;
-        const[carts] = await pool.query('SELECT cart_id FROM carts WHERE user_id = ?', [user_id]);
+        const[carts] = await pool.query('SELECT cart_id FROM cart WHERE user_id = ?', [user_id]);
         if(carts.length === 0){
             return res.status(404).json({Message: 'No Active Cart Found for the User'});
         }
@@ -979,6 +999,50 @@ async function createOrder(req,res){
         await connection.query(deleteCartItems, [cart_id]);
 
         await connection.commit();
+
+        // Send order confirmation email and SMS
+        try {
+            // Get user details for notifications
+            const [userDetails] = await pool.query(
+                'SELECT firstName, lastName, email, phoneNumber, email_notifications, sms_notifications FROM users WHERE user_id = ?', 
+                [user_id]
+            );
+            
+            if (userDetails.length > 0) {
+                const user = {
+                    first_name: userDetails[0].firstName,
+                    last_name: userDetails[0].lastName,
+                    email: userDetails[0].email,
+                    phone: userDetails[0].phone,
+                    email_notifications: userDetails[0].email_notifications,
+                    sms_notifications: userDetails[0].sms_notifications
+                };
+
+                // Prepare order details for email
+                const orderDetails = {
+                    order_id: shop_order_id,
+                    total_amount: total_amount,
+                    created_at: new Date(),
+                    items: items.map(item => ({
+                        name: `Product Item #${item.product_item_id}`, // You might want to get actual product names
+                        quantity: item.qty,
+                        price: item.price
+                    }))
+                };
+
+                // Send order confirmation email
+                await notificationService.sendOrderConfirmation(user, orderDetails);
+                console.log('Order confirmation email sent for order:', shop_order_id);
+
+                // Send SMS notification
+                await notificationService.sendOrderStatusSMS(user, shop_order_id, 'processing');
+                console.log('Order SMS notification sent for order:', shop_order_id);
+            }
+        } catch (notificationError) {
+            console.error('Failed to send order notifications:', notificationError);
+            // Don't fail the order if notifications fail
+        }
+
         res.status(201).json({
             Message: 'Order Created Successfully',
             shop_order_id: shop_order_id
@@ -1064,6 +1128,48 @@ async function handleSuccessfulPayment(paymentIntent){
         
         await connection.commit();
         console.log(`Order and Payment records updated for Transaction ID: ${paymentIntent.id}`);
+
+        // Send payment confirmation email
+        if (orderInfo.length > 0) {
+            try {
+                // Get full user details for notifications
+                const [userDetails] = await pool.query(
+                    'SELECT firstName, lastName, email, phoneNumber, email_notifications, sms_notifications FROM users u JOIN shop_orders so ON u.user_id = so.user_id WHERE so.transaction_id = ?', 
+                    [paymentIntent.id]
+                );
+
+                if (userDetails.length > 0) {
+                    const user = {
+                        first_name: userDetails[0].firstName,
+                        last_name: userDetails[0].lastName,
+                        email: userDetails[0].email,
+                        phone: userDetails[0].phoneNumber,
+                        email_notifications: userDetails[0].email_notifications,
+                        sms_notifications: userDetails[0].sms_notifications
+                    };
+
+                    // Get order details
+                    const [orderDetails] = await pool.query(
+                        'SELECT shop_order_id, total_amount FROM shop_orders WHERE transaction_id = ?',
+                        [paymentIntent.id]
+                    );
+
+                    if (orderDetails.length > 0) {
+                        const order = {
+                            order_id: orderDetails[0].shop_order_id,
+                            total_amount: orderDetails[0].total_amount
+                        };
+
+                        // Send payment confirmation email
+                        await notificationService.sendPaymentConfirmation(user, order, 'Credit/Debit Card');
+                        console.log('Payment confirmation email sent for transaction:', paymentIntent.id);
+                    }
+                }
+            } catch (notificationError) {
+                console.error('Failed to send payment confirmation:', notificationError);
+                // Don't fail the payment processing if notification fails
+            }
+        }
         
         // TODO: Send order confirmation email when email system is implemented
         if(orderInfo.length > 0) {
@@ -1187,23 +1293,61 @@ async function getOrderById(req,res){
 };
 
 // Update Order Status (Admin only)
-async function updateOrderStatus(req,res){
-    try{
-        const {orderId} = req.params;
-        const {statusId} = req.body;
+async function updateOrderStatus(req,res) {
+    try {
+        const { order_id } = req.params;
+        const { order_status_id, tracking_number } = req.body;
 
-        if(!statusId){
-            return res.status(400).json({Message: 'Status ID is required'});
+        const validStatuses = ['processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
+        if (!validStatuses.includes(order_status_id)) {
+            return res.status(400).json({Message: 'Invalid order status'});
         }
-        const [updateStatus] = await pool.query('UPDATE shop_orders SET order_status_id = ? WHERE shop_order_id = ?', [statusId, orderId]);
-        if(updateStatus.affectedRows === 0){
-            return res.status(404).json({Message: 'Order not found'});
+
+        // Update order status
+        await pool.query('UPDATE shop_orders SET order_status_id = ? WHERE shop_order_id = ?', [order_status_id, order_id]);
+
+        // If status is shipped and tracking number provided, update that too
+        if (order_status_id === 'shipped' && tracking_number) {
+            await pool.query('UPDATE shop_orders SET tracking_number = ? WHERE shop_order_id = ?', [tracking_number, order_id]);
         }
-        res.status(200).json({Message: 'Order status updated successfully'});
-    }
-    catch(error){
-        console.error('ERROR Updating Order Status:', error);
-        res.status(500).json({Error:'Error Updating Order Status'});
+
+        // Get order and user details for notification
+        const [orderDetails] = await pool.query(`
+            SELECT so.*, u.firstName, u.lastName, u.email, u.phoneNumber, u.email_notifications, u.sms_notifications
+            FROM shop_orders so
+            JOIN users u ON so.user_id = u.user_id
+            WHERE so.shop_order_id = ?
+        `, [order_id]);
+
+        if (orderDetails.length > 0) {
+            const order = orderDetails[0];
+            const user = {
+                first_name: order.firstName,
+                last_name: order.lastName,
+                email: order.email,
+                phone: order.phoneNumber,
+                email_notifications: order.email_notifications,
+                sms_notifications: order.sms_notifications
+            };
+
+            try {
+                // Send email notification
+                await notificationService.sendOrderStatusEmail(user, order, order_status_id, tracking_number);
+
+                // Send SMS notification
+                await notificationService.sendOrderStatusSMS(user, order_id, order_status_id);
+                console.log('Order status notifications sent for order:', order_id);
+            } catch (notificationError) {
+                console.error('Failed to send order status notifications:', notificationError);
+                // Don't fail the status update if notifications fail
+            }
+        }
+
+        res.status(200).json({Message: 'Order status updated and notifications sent'});
+
+    } catch (error) {
+        console.error('ERROR updating order status:', error);
+        res.status(500).json({Message: 'Failed to update order status'});
     }
 };
 
@@ -3562,7 +3706,7 @@ async function getPromotionStats(req,res) {
     }
 };
 
-// =================== PROMOTION HELPER FUNCTIONS ===================
+//PROMOTION HELPER FUNCTIONS
 
 async function checkPromotionValidity(promotionCode, userId, cartTotal, cartItems = []) {
     try{
@@ -3712,6 +3856,427 @@ async function processPromotionApplication(promotionCode, userId, orderId) {
 };
 
 // Email Notification Function
+async function subscribeBackInStock(req,res) {
+    try {
+        const user_id = req.user.user_id;
+        const { product_id, product_item_id, email_notification = true, sms_notification = false } = req.body;
+
+        if (!product_id) {
+            return res.status(400).json({Message: 'Product ID is required'});
+        }
+
+        // Get user details
+        const [userDetails] = await pool.query(
+            'SELECT email, phoneNumber FROM users WHERE user_id = ?',
+            [user_id]
+        );
+
+        if (userDetails.length === 0) {
+            return res.status(404).json({Message: 'User not found'});
+        }
+
+        const user = userDetails[0];
+
+        // Check if notification already exists
+        const [existing] = await pool.query(
+            'SELECT stock_notification_id FROM stock_notification WHERE user_id = ? AND product_id = ? AND (product_item_id = ? OR (product_item_id IS NULL AND ? IS NULL))',
+            [user_id, product_id, product_item_id, product_item_id]
+        );
+
+        if (existing.length > 0) {
+            // Update existing notification
+            await pool.query(
+                'UPDATE stock_notification SET status = "active", email_notification = ?, sms_notification = ? WHERE id = ?',
+                [email_notification, sms_notification, existing[0].id]
+            );
+        } else {
+            // Create new notification
+            await pool.query(
+                'INSERT INTO stock_notification (user_id, product_id, product_item_id, email, phone, email_notification, sms_notification) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [user_id, product_id, product_item_id, user.email, user.phoneNumber, email_notification, sms_notification]
+            );
+        }
+
+        res.status(201).json({Message: 'Successfully subscribed to back-in-stock notification'});
+
+    } catch (error) {
+        console.error('ERROR subscribing to back-in-stock notification:', error);
+        res.status(500).json({Message: 'Failed to subscribe to notification'});
+    }
+};
+
+// Unsubscribe from back-in-stock notifications
+async function unsubscribeBackInStock(req,res) {
+    try {
+        const user_id = req.user.user_id;
+        const { product_id } = req.params;
+        const { product_item_id } = req.query;
+
+        await pool.query(
+            'UPDATE stock_notification SET status = "cancelled" WHERE user_id = ? AND product_id = ? AND (product_item_id = ? OR (product_item_id IS NULL AND ? IS NULL))',
+            [user_id, product_id, product_item_id, product_item_id]
+        );
+
+        res.status(200).json({Message: 'Successfully unsubscribed from back-in-stock notification'});
+
+    } catch (error) {
+        console.error('ERROR unsubscribing from back-in-stock notification:', error);
+        res.status(500).json({Message: 'Failed to unsubscribe from notification'});
+    }
+};
+
+// Trigger back-in-stock notifications (called when stock is updated)
+async function triggerBackInStockNotifications(product_id, product_item_id = null) {
+    try {
+        // Get product details
+        const productQuery = product_item_id 
+            ? 'SELECT p.product_id, p.name, p.image_url, pi.price, pi.qty_in_stock FROM products p JOIN product_item pi ON p.product_id = pi.product_id WHERE p.product_id = ? AND pi.product_item_id = ?'
+            : 'SELECT product_id, name, image_url, price, qty_in_stock FROM products WHERE product_id = ?';
+        
+        const queryParams = product_item_id ? [product_id, product_item_id] : [product_id];
+        const [productDetails] = await pool.query(productQuery, queryParams);
+
+        if (productDetails.length === 0 || productDetails[0].qty_in_stock <= 0) {
+            return; // Product not found or still out of stock
+        }
+
+        const product = productDetails[0];
+
+        // Get all active notifications for this product
+        const [notifications] = await pool.query(
+            `SELECT sn.*, u.firstName, u.lastName, u.email_notifications, u.sms_notifications 
+            FROM stock_notification sn JOIN users u ON sn.user_id = u.user_id WHERE sn.product_id = ? 
+            AND (sn.product_item_id = ? OR (sn.product_item_id IS NULL AND ? IS NULL)) 
+            AND sn.status = "active"`,
+            [product_id, product_item_id, product_item_id]
+        );
+
+        // Send notifications to all subscribers
+        for (const notification of notifications) {
+            try {
+                const user = {
+                    first_name: notification.firstName,
+                    last_name: notification.lastName,
+                    email: notification.email,
+                    phone: notification.phoneNumber,
+                    email_notifications: notification.email_notifications && notification.email_notification,
+                    sms_notifications: notification.sms_notifications && notification.sms_notification
+                };
+
+                // Send email notification
+                if (user.email_notifications) {
+                    await notificationService.sendBackInStockEmail(user, product);
+                }
+
+                // Send SMS notification
+                if (user.sms_notifications && user.phoneNumber) {
+                    await notificationService.sendSMS({
+                        to: user.phoneNumber,
+                        message: `Great news! ${product.name} is back in stock at Goldmarks Jewellery. Don't miss out - shop now! ${process.env.FRONTEND_URL}/product/${product_id}`
+                    });
+                }
+
+                // Mark notification as sent
+                await pool.query(
+                    'UPDATE stock_notification SET status = "notified", notified_at = NOW() WHERE id = ?',
+                    [notification.id]
+                );
+
+            } catch (notificationError) {
+                console.error(`Failed to send back-in-stock notification to user ${notification.user_id}:`, notificationError);
+            }
+        }
+
+        console.log(`Sent back-in-stock notifications for product ${product_id} to ${notifications.length} users`);
+
+    } catch (error) {
+        console.error('Error triggering back-in-stock notifications:', error);
+    }
+};
+
+// Send promotional campaign
+async function sendPromotionalEmail(req,res) {
+    try {
+        const { title, subject, content, discount_percentage, promo_code, valid_until, target_audience } = req.body;
+
+        if (!title || !subject || !content) {
+            return res.status(400).json({Message: 'Title, subject, and content are required'});
+        }
+
+        // Get target users based on audience (simplified - no campaign table)
+        let userQuery;
+        switch (target_audience) {
+            case 'all':
+                userQuery = 'SELECT user_id, firstName, lastName, email FROM users WHERE marketing_emails = TRUE AND email_notifications = TRUE';
+                break;
+            case 'customers':
+                userQuery = 'SELECT DISTINCT u.user_id, u.firstName, u.lastName, u.email FROM users u JOIN shop_orders so ON u.user_id = so.user_id WHERE u.marketing_emails = TRUE AND u.email_notifications = TRUE';
+                break;
+            case 'subscribers':
+            default:
+                userQuery = 'SELECT user_id, firstName, lastName, email FROM users WHERE marketing_emails = TRUE AND email_notifications = TRUE';
+                break;
+        }
+
+        const [users] = await pool.query(userQuery);
+
+        // Prepare promotion data
+        const promotion = {
+            title: title,
+            subject: subject,
+            content: content,
+            discount: discount_percentage,
+            code: promo_code,
+            validUntil: valid_until ? new Date(valid_until).toLocaleDateString() : null,
+            ctaUrl: `${process.env.FRONTEND_URL}/shop`,
+            ctaText: 'Shop Now'
+        };
+
+        // Send emails directly
+        const results = await notificationService.sendBulkPromotionalEmails(users, promotion);
+
+        res.status(200).json({
+            Message: 'Promotional emails sent successfully',
+            results: results
+        });
+
+    } catch (error) {
+        console.error('ERROR sending promotional emails:', error);
+        res.status(500).json({Message: 'Failed to send promotional emails'});
+    }
+};
+
+// Send promotional email to specific user (for targeted marketing)
+async function sendPersonalPromotionalEmail(req,res) {
+    try {
+        const { user_id } = req.params;
+        const { title, subject, content, discount_percentage, promo_code, valid_until } = req.body;
+
+        if (!title || !subject || !content) {
+            return res.status(400).json({Message: 'Title, subject, and content are required'});
+        }
+
+        // Get user details
+        const [userDetails] = await pool.query(
+            'SELECT firstName, lastName, email, marketing_emails, email_notifications FROM users WHERE user_id = ?',
+            [user_id]
+        );
+
+        if (userDetails.length === 0) {
+            return res.status(404).json({Message: 'User not found'});
+        }
+
+        const user = {
+            first_name: userDetails[0].firstName,
+            last_name: userDetails[0].lastName,
+            email: userDetails[0].email,
+            marketing_emails: userDetails[0].marketing_emails,
+            email_notifications: userDetails[0].email_notifications
+        };
+
+        // Prepare promotion data
+        const promotion = {
+            title: title,
+            subject: subject,
+            content: content,
+            discount: discount_percentage,
+            code: promo_code,
+            validUntil: valid_until ? new Date(valid_until).toLocaleDateString() : null,
+            ctaUrl: `${process.env.FRONTEND_URL}/shop`,
+            ctaText: 'Shop Now'
+        };
+
+        // Send promotional email
+        const result = await notificationService.sendPromotionalEmail(user, promotion);
+
+        res.status(200).json({
+            Message: 'Promotional email sent successfully',
+            result: result
+        });
+
+    } catch (error) {
+        console.error('ERROR sending personal promotional email:', error);
+        res.status(500).json({Message: 'Failed to send promotional email'});
+    }
+};
+
+// Subscribe to newsletter
+async function subscribeNewsletter(req,res) {
+    try {
+        const { email, first_name, last_name } = req.body;
+
+        if (!email) {
+            return res.status(400).json({Message: 'Email is required'});
+        }
+
+        // Check if user already exists
+        const [existing] = await pool.query(
+            'SELECT user_id, firstName, lastName, marketing_emails FROM users WHERE email = ?',
+            [email]
+        );
+
+        if (existing.length > 0) {
+            // Update existing user to opt-in to marketing emails
+            await pool.query(
+                'UPDATE users SET marketing_emails = TRUE WHERE email = ?',
+                [email]
+            );
+        } else {
+            // Create new user account (they can set password later)
+            await pool.query(
+                'INSERT INTO users (firstName, lastName, email, marketing_emails, email_notifications) VALUES (?, ?, ?, TRUE, TRUE)',
+                [first_name || 'Valued', last_name || 'Customer', email]
+            );
+        }
+
+        // Send confirmation email
+        const user = {
+            first_name: first_name || existing[0]?.firstName || 'Valued Customer',
+            email: email,
+            email_notifications: true
+        };
+
+        try {
+            await notificationService.sendNewsletterSubscriptionEmail(user);
+            console.log('Newsletter subscription email sent to:', email);
+        } catch (emailError) {
+            console.error('Failed to send newsletter subscription email:', emailError);
+            // Don't fail subscription if email fails
+        }
+
+        res.status(201).json({Message: 'Successfully subscribed to newsletter'});
+
+    } catch (error) {
+        console.error('ERROR subscribing to newsletter:', error);
+        res.status(500).json({Message: 'Failed to subscribe to newsletter'});
+    }
+};
+
+// Unsubscribe from newsletter (simplified - uses users table)
+async function unsubscribeNewsletter(req,res) {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({Message: 'Email is required'});
+        }
+
+        // Update user to opt-out of marketing emails
+        await pool.query('UPDATE users SET marketing_emails = FALSE WHERE email = ?', [email]);
+
+        res.status(200).json({Message: 'Successfully unsubscribed from newsletter'});
+
+    } catch (error) {
+        console.error('ERROR unsubscribing from newsletter:', error);
+        res.status(500).json({Message: 'Failed to unsubscribe from newsletter'});
+    }
+};
+
+// Get user notification preferences
+async function getNotificationPreferences(req,res) {
+    try {
+        const user_id = req.user.user_id;
+
+        const [preferences] = await pool.query(
+            'SELECT email_notifications, sms_notifications, marketing_emails FROM users WHERE user_id = ?',
+            [user_id]
+        );
+
+        if (preferences.length === 0) {
+            return res.status(404).json({Message: 'User not found'});
+        }
+
+        res.status(200).json({
+            Message: 'Notification preferences retrieved successfully',
+            preferences: preferences[0]
+        });
+
+    } catch (error) {
+        console.error('ERROR getting notification preferences:', error);
+        res.status(500).json({Message: 'Failed to get notification preferences'});
+    }
+};
+
+// Update user notification preferences
+async function updateNotificationPreferences(req,res) {
+    try {
+        const user_id = req.user.user_id;
+        const { email_notifications, sms_notifications, marketing_emails } = req.body;
+
+        await pool.query(
+            'UPDATE users SET email_notifications = ?, sms_notifications = ?, marketing_emails = ? WHERE user_id = ?',
+            [email_notifications, sms_notifications, marketing_emails, user_id]
+        );
+
+        res.status(200).json({Message: 'Notification preferences updated successfully'});
+
+    } catch (error) {
+        console.error('ERROR updating notification preferences:', error);
+        res.status(500).json({Message: 'Failed to update notification preferences'});
+    }
+};
+
+// Test notification endpoint (for development)
+// async function testNotification(req,res) {
+//     try {
+//         const { type, email, phone } = req.body;
+//         const user_id = req.user.user_id;
+
+//         const [userDetails] = await pool.query(
+//             'SELECT firstName, lastName, email, phoneNumber, email_notifications, sms_notifications FROM users WHERE user_id = ?',
+//             [user_id]
+//         );
+
+//         if (userDetails.length === 0) {
+//             return res.status(404).json({Message: 'User not found'});
+//         }
+
+//         const user = {
+//             first_name: userDetails[0].firstName,
+//             last_name: userDetails[0].lastName,
+//             email: email || userDetails[0].email,
+//             phone: phone || userDetails[0].phoneNumber,
+//             email_notifications: true,
+//             sms_notifications: true,
+//             marketing_emails: true
+//         };
+
+//         let result;
+
+//         switch (type) {
+//             case 'welcome':
+//                 result = await notificationService.sendWelcomeEmail(user);
+//                 break;
+//             case 'promotional':
+//                 const promotion = {
+//                     title: 'Test Promotion',
+//                     subject: 'Test Promotional Email',
+//                     content: 'This is a test promotional email to verify the system is working correctly.',
+//                     discount: 20,
+//                     code: 'TEST20',
+//                     validUntil: '2025-12-31',
+//                     ctaUrl: process.env.FRONTEND_URL + '/shop',
+//                     ctaText: 'Shop Now'
+//                 };
+//                 result = await notificationService.sendPromotionalEmail(user, promotion);
+//                 break;
+//             case 'sms':
+//                 result = await notificationService.sendSMS({
+//                     to: user.phone,
+//                     message: 'Test SMS from Goldmarks Jewellery notification system. Everything is working correctly!'
+//                 });
+//                 break;
+//             default:
+//                 return res.status(400).json({Message: 'Invalid test type'});
+//         }
+
+//         res.status(200).json({Message: 'Test notification sent', result: result});
+
+//     } catch (error) {
+//         console.error('ERROR sending test notification:', error);
+//         res.status(500).json({Message: 'Failed to send test notification'});
+//     }
+// };
 
 // 6. API  ROUTES
 app.get('/', (req,res) => {
@@ -3815,8 +4380,33 @@ app.post('/api/admin/promotions', authenticateJWT, authorizeAdminJWT, createProm
 app.put('/api/admin/promotions/:id', authenticateJWT, authorizeAdminJWT, updatePromotion);
 app.delete('/api/admin/promotions/:id', authenticateJWT, authorizeAdminJWT, deletePromotion);
 app.get('/api/admin/promotions/stats', authenticateJWT, authorizeAdminJWT, getPromotionStats);
+
+// Back-in-stock notification routes
+app.post('/notifications/back-in-stock', authenticateJWT, subscribeBackInStock);
+app.delete('/notifications/back-in-stock/:product_id', authenticateJWT, unsubscribeBackInStock);
+
+// Order status routes (admin only)
+app.put('/orders/:order_id/status', authenticateJWT, authorizeAdminJWT, updateOrderStatus);
+
+// Promotional email routes (admin only) - simplified, no campaign tables
+app.post('/promotional-emails/send-bulk', authenticateJWT, authorizeAdminJWT, sendPromotionalEmail);
+app.post('/promotional-emails/send-personal/:user_id', authenticateJWT, authorizeAdminJWT, sendPersonalPromotionalEmail);
+
+// Newsletter routes (uses users table)
+app.post('/newsletter/subscribe', subscribeNewsletter);
+app.post('/newsletter/unsubscribe', unsubscribeNewsletter);
+
+// User notification preferences
+app.get('/user/notification-preferences', authenticateJWT, getNotificationPreferences);
+app.put('/user/notification-preferences', authenticateJWT, updateNotificationPreferences);
+
+// // Test notification (development only)
+// app.post('/test-notification', authenticateJWT, testNotification);
+
 //7. RUN
 app.listen(3000,()=>{
     console.log(`Server is running on port ${port}`)
 });
+
+
 
