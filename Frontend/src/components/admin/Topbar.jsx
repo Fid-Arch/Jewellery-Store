@@ -22,7 +22,7 @@ function Topbar() {
     <header className="flex justify-between items-center bg-white/80 backdrop-blur px-6 py-4 shadow-sm border-b border-yellow-100 sticky top-0 z-40">
       {/* Left */}
       <h2 className="text-xl font-bold bg-gradient-to-r from-yellow-500 to-yellow-700 bg-clip-text text-transparent">
-        Welcome, {user?.role === "ADMIN" ? "Admin" : "Staff"}
+        Welcome, {user?.role.toLowerCase() === "admin" ? "Admin" : "Staff"}
       </h2>
 
       {/* Right */}
@@ -82,7 +82,7 @@ function Topbar() {
                 </span>
                 <span
                   className={`px-2 py-1 text-xs rounded-full ${
-                    user?.role === "ADMIN"
+                    user?.role.toLowerCase() === "admin"
                       ? "bg-yellow-200 text-yellow-800"
                       : "bg-blue-200 text-blue-800"
                   }`}

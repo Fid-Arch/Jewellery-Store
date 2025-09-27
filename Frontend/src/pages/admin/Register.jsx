@@ -31,7 +31,7 @@ export default function AdminRegister() {
         roles_id: 2
       });
 
-      navigate("/admin/login");
+      navigate("/login");
     } catch (err) {
       setError(`❌ ${err.message || 'Admin registration failed.'}`);
     } finally {
@@ -101,25 +101,14 @@ export default function AdminRegister() {
           </button>
         </form>
         <p className="text-center text-sm text-gray-600 mt-4">
-          Already have an admin account?{" "}
+          Already have an account?{" "}
           <button
             type="button"
-            onClick={() => navigate("/admin/login")}
+            onClick={() => navigate("/login")}
             className="text-yellow-600 hover:underline font-medium"
             disabled={loading}
           >
-            Admin Login
-          </button>
-        </p>
-        {/* Optional: Link to customer register */}
-        <p className="text-center text-sm text-gray-600 mt-2">
-          Customer registration?{" "}
-          <button
-            type="button"
-            onClick={() => navigate("/register")}
-            className="text-yellow-600 hover:underline font-medium"
-          >
-            Go to Customer Register
+            Login
           </button>
         </p>
       </div>

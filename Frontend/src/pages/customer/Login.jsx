@@ -29,12 +29,18 @@ export default function CustomerLogin() {
       const { user } = result;
       login({
         email: normalizedEmail,
-        role: user.role,
+        role: user.role.toLowerCase(),
         token: result.token
       })
-
-      if (user.role === "Customer") navigate("/profile")
-      else navigate("/admin")
+      
+      const role = user.role?.toLowerCase() || ""; // Normalize to lowercase
+      if (role === "customer") {
+        navigate("/profile");
+      } else if (role === "admin") {
+        navigate("/admin");
+      } else {
+        navigate("/");
+      }
     } catch (err) {
       setError(`❌ ${err.message || 'Login failed. Check credentials.'}`)
     } finally {

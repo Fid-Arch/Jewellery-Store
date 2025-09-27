@@ -28,17 +28,10 @@ const dummyOrders = [
 export default function Profile() {
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    navigate("/login");
-  };
-
   return (
     <div className="max-w-5xl mx-auto px-6 py-16">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-serif text-yellow-600">My Profile</h1>
-        <button onClick={handleLogout} className="btn-outline">
-          Logout
-        </button>
       </div>
 
       {/* Account Info */}
