@@ -1000,49 +1000,14 @@ async function createOrder(req,res){
 
         await connection.commit();
 
-        // Send order confirmation email and SMS
-        try {
-            // Get user details for notifications
-            const [userDetails] = await pool.query(
-                'SELECT firstName, lastName, email, phoneNumber, email_notifications, sms_notifications FROM users WHERE user_id = ?', 
-                [user_id]
-            );
-            
-            if (userDetails.length > 0) {
-                const user = {
-                    first_name: userDetails[0].firstName,
-                    last_name: userDetails[0].lastName,
-                    email: userDetails[0].email,
-                    phone: userDetails[0].phone,
-                    email_notifications: userDetails[0].email_notifications,
-                    sms_notifications: userDetails[0].sms_notifications
-                };
-
-                // Prepare order details for email
-                const orderDetails = {
-                    order_id: shop_order_id,
-                    total_amount: total_amount,
-                    created_at: new Date(),
-                    items: items.map(item => ({
-                        name: `Product Item #${item.product_item_id}`, // You might want to get actual product names
-                        quantity: item.qty,
-                        price: item.price
-                    }))
-                };
-
-                // Send order confirmation email
-                await notificationService.sendOrderConfirmation(user, orderDetails);
-                console.log('Order confirmation email sent for order:', shop_order_id);
-
-                // Send SMS notification
-                await notificationService.sendOrderStatusSMS(user, shop_order_id, 'processing');
-                console.log('Order SMS notification sent for order:', shop_order_id);
-            }
-        } catch (notificationError) {
-            console.error('Failed to send order notifications:', notificationError);
-            // Don't fail the order if notifications fail
-        }
-
+        const user = {
+            first_name: userDetails[0].firstName,
+            last_name: userDetails[0].lastName,
+            email: userDetails[0].email,
+           phone: userDetails[0].phoneNumber,
+            email_notifications: userDetails[0].email_notifications,
+            sms_notifications: userDetails[0].sms_notifications
+        };
         res.status(201).json({
             Message: 'Order Created Successfully',
             shop_order_id: shop_order_id
@@ -1298,16 +1263,25 @@ async function updateOrderStatus(req,res) {
         const { order_id } = req.params;
         const { order_status_id, tracking_number } = req.body;
 
-        const validStatuses = ['processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
-        if (!validStatuses.includes(order_status_id)) {
-            return res.status(400).json({Message: 'Invalid order status'});
-        }
+        // Map status strings to numeric IDs used in database
+        const statusMapping = {
+            'processing': 1,
+            'paid': 2, 
+            'shipped': 3,
+            'delivered': 4,
+            'cancelled': 5,
+            'refunded': 6
+        };
+        const nextStatusId = statusMapping[order_status_id];
+        if (!nextStatusId) {
+             return res.status(400).json({Message: 'Invalid order status'});
+         }
 
-        // Update order status
-        await pool.query('UPDATE shop_orders SET order_status_id = ? WHERE shop_order_id = ?', [order_status_id, order_id]);
+        // Update order status with numeric ID
+        await pool.query('UPDATE shop_orders SET order_status_id = ? WHERE shop_order_id = ?', [nextStatusId, order_id]);
 
         // If status is shipped and tracking number provided, update that too
-        if (order_status_id === 'shipped' && tracking_number) {
+        if (nextStatusId === statusMapping['shipped'] && tracking_number) {
             await pool.query('UPDATE shop_orders SET tracking_number = ? WHERE shop_order_id = ?', [tracking_number, order_id]);
         }
 
@@ -3886,8 +3860,8 @@ async function subscribeBackInStock(req,res) {
         if (existing.length > 0) {
             // Update existing notification
             await pool.query(
-                'UPDATE stock_notification SET status = "active", email_notification = ?, sms_notification = ? WHERE id = ?',
-                [email_notification, sms_notification, existing[0].id]
+                'UPDATE stock_notification SET status = "active", email_notification = ?, sms_notification = ? WHERE stock_notification_id = ?',
+                [email_notification, sms_notification, existing[0].stock_notification_id]
             );
         } else {
             // Create new notification
@@ -3898,7 +3872,7 @@ async function subscribeBackInStock(req,res) {
         }
 
         res.status(201).json({Message: 'Successfully subscribed to back-in-stock notification'});
-
+        
     } catch (error) {
         console.error('ERROR subscribing to back-in-stock notification:', error);
         res.status(500).json({Message: 'Failed to subscribe to notification'});
@@ -3929,9 +3903,10 @@ async function unsubscribeBackInStock(req,res) {
 async function triggerBackInStockNotifications(product_id, product_item_id = null) {
     try {
         // Get product details
-        const productQuery = product_item_id 
-            ? 'SELECT p.product_id, p.name, p.image_url, pi.price, pi.qty_in_stock FROM products p JOIN product_item pi ON p.product_id = pi.product_id WHERE p.product_id = ? AND pi.product_item_id = ?'
-            : 'SELECT product_id, name, image_url, price, qty_in_stock FROM products WHERE product_id = ?';
+       const productQuery = product_item_id 
+        ? `SELECT p.product_id, p.productname, p.product_image, pi.price, pi.qty_in_stock 
+            FROM products p JOIN product_item pi ON p.product_id = pi.product_id WHERE p.product_id = ? AND pi.product_item_id = ? `
+        : 'SELECT product_id, productname, product_image FROM products WHERE product_id = ?';
         
         const queryParams = product_item_id ? [product_id, product_item_id] : [product_id];
         const [productDetails] = await pool.query(productQuery, queryParams);
@@ -3972,14 +3947,14 @@ async function triggerBackInStockNotifications(product_id, product_item_id = nul
                 if (user.sms_notifications && user.phoneNumber) {
                     await notificationService.sendSMS({
                         to: user.phoneNumber,
-                        message: `Great news! ${product.name} is back in stock at Goldmarks Jewellery. Don't miss out - shop now! ${process.env.FRONTEND_URL}/product/${product_id}`
+                        message: `Great news! ${product.productname} is back in stock at Goldmarks Jewellery. Don't miss out - shop now! ${process.env.FRONTEND_URL}/product/${product_id}`
                     });
                 }
 
                 // Mark notification as sent
                 await pool.query(
-                    'UPDATE stock_notification SET status = "notified", notified_at = NOW() WHERE id = ?',
-                    [notification.id]
+                    'UPDATE stock_notification SET status = "notified", notified_at = NOW() WHERE stock_notification_id = ?',
+                    [notification.stock_notification_id]
                 );
 
             } catch (notificationError) {
