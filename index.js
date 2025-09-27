@@ -871,7 +871,7 @@ async function processPayment(req,res){
     try{
         const user_id = req.user.user_id;
 
-        const [carts] = await pool.query('SELECT cart_id FROM carts WHERE user_id = ?', [user_id]);
+        const [carts] = await pool.query('SELECT cart_id FROM cart WHERE user_id = ?', [user_id]);
         if(carts.length === 0){
             return res.status(404).json({Message: 'No Active Cart Found for the User'});
         }
@@ -920,7 +920,7 @@ async function createOrder(req,res){
         connection = await pool.getConnection();
         await connection.beginTransaction();
 
-        const [carts] = await connection.query('SELECT cart_id FROM carts WHERE user_id = ?', [user_id]);
+        const [carts] = await connection.query('SELECT cart_id FROM cart WHERE user_id = ?', [user_id]);
         if(carts.length === 0){
             await connection.rollback();
             return res.status(404).json({Message: 'No active cart found for the user'});
@@ -938,7 +938,7 @@ async function createOrder(req,res){
             await connection.rollback();
             return res.status(400).json({Message: 'Cart is Empty'});
         }   
-        const total_amount = items.reduce((total, item) => total + (item.price * item.quantity), 0);
+        const total_amount = items.reduce((total, item) => total + (item.price * item.qty), 0);
 
         const order = 'INSERT INTO shop_orders (user_id, total_amount, shipping_method, shipping_address, transaction_id, payment_status, order_status) VALUES (?,?,?,?,?,?,?)';
         const orderValues = [user_id, total_amount, shipping_method, shipping_address, process_payment_id, 'Pending', 1];
@@ -949,8 +949,8 @@ async function createOrder(req,res){
         await connection.query(payment, [shop_order_id, total_amount, 'Stripe', 'Pending', process_payment_id]);
         
         //Record into the orderline
-        const orderline = 'INSERT INTO order_line (shop_order_id, product_item_id, quantity, price) VALUES (?,?,?,?)';
-        const orderlinevalues = items.map(item => [shop_order_id, item.product_item_id, item.quantity, item.price]);
+        const orderline = 'INSERT INTO order_line (shop_order_id, product_item_id, qty, price) VALUES (?,?,?,?)';
+        const orderlinevalues = items.map(item => [shop_order_id, item.product_item_id, item.qty, item.price]);
         await connection.query(orderline, [orderlinevalues]);
 
         // Record stock movements for each ordered item
@@ -1090,8 +1090,8 @@ async function handleFailedPayment(paymentIntent) {
 
         // Update order status to failed
         await connection.query(
-            'UPDATE shop_orders SET payment_status = "Failed", order_status_id = 5 WHERE transaction_id = ?',
-            [paymentIntent.id]
+            'UPDATE shop_orders SET payment_status = "Failed", order_status = ? WHERE transaction_id = ?',
+            [5, paymentIntent.id]
         );
 
         // Update payment record
@@ -1099,7 +1099,6 @@ async function handleFailedPayment(paymentIntent) {
             'UPDATE payment SET payment_status = "Failed" WHERE transaction_id = ?',
             [paymentIntent.id]
         );
-
         // Get user email for notification
         const [orderInfo] = await connection.query(`
             SELECT u.email, u.firstName, so.shop_order_id 
@@ -3793,29 +3792,29 @@ app.delete('/shipping/addresses/:addressId', authenticateJWT, deleteShippingAddr
 app.put('/shipping/addresses/:addressId/default', authenticateJWT, setDefaultShippingAddress);
 app.post('/shipping/validate-address', validateShippingAddress);
 
-// =================== CART ROUTES ===================
+// CART ROUTES API Routes
 app.post('/cart/items', authenticateJWT, addItemToCart);
 app.get('/cart', authenticateJWT, getUserCart);
 app.patch('/cart/items/:cartItemId', authenticateJWT, updateCartItem);
 app.delete('/cart/items/:cartItemId', authenticateJWT, removeCartItem);
 app.delete('/cart', authenticateJWT, clearCart);
 
-// =================== PAYMENT & ORDER ROUTES ===================
+// PAYMENT & ORDER API Routes
 app.post('/payment/process', authenticateJWT, processPayment);
 app.post('/orders', authenticateJWT, createOrder);
 app.get('/orders', authenticateJWT, getUserOrders);
 app.get('/orders/:orderId', authenticateJWT, getOrderById);
 
-// =================== PROMOTION ROUTES ===================
+// PROMOTION API Routes 
 app.get('/api/promotions', getActivePromotions);
 app.post('/api/promotions/validate', validatePromotionCode);
 app.post('/api/promotions/apply', applyPromotionToOrder);
-// TODO: Add authorizeAdminJWT middleware for admin-only access
-app.post('/api/admin/promotions', authenticateJWT, createPromotion);
-app.put('/api/admin/promotions/:id', authenticateJWT, updatePromotion);
-app.delete('/api/admin/promotions/:id', authenticateJWT, deletePromotion);
-app.get('/api/admin/promotions/stats', authenticateJWT, getPromotionStats);
 
+// Admin API Routes
+app.post('/api/admin/promotions', authenticateJWT, authorizeAdminJWT, createPromotion);
+app.put('/api/admin/promotions/:id', authenticateJWT, authorizeAdminJWT, updatePromotion);
+app.delete('/api/admin/promotions/:id', authenticateJWT, authorizeAdminJWT, deletePromotion);
+app.get('/api/admin/promotions/stats', authenticateJWT, authorizeAdminJWT, getPromotionStats);
 //7. RUN
 app.listen(3000,()=>{
     console.log(`Server is running on port ${port}`)
