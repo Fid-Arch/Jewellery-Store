@@ -47,7 +47,7 @@ import Policies from "./pages/cms/Policies";
 import Contact from "./pages/cms/Contact";
 
 function App() {
-  const { user } = useContext(StoreContext);
+  const { user, isLoading } = useContext(StoreContext);
 
   // Handle role-based redirect after login
   const getRedirectPath = () => {
@@ -56,6 +56,18 @@ function App() {
     if (user.role.toLowerCase() === "staff") return "/staff/orders";
     return "/";
   };
+
+  // ✅ Show loader while hydrating
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Router>
@@ -77,11 +89,16 @@ function App() {
         />
 
         {/* Customer routes */}
-        <Route path="/cart" element={<Cart />} />
-        <Route path="/checkout" element={<Checkout />} />
-        <Route path="/wishlist" element={<Wishlist />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/orders" element={<OrderTracking />} />
+        <Route path="/cart" element={
+          user?.role.toLowerCase() === "customer" ? <Cart /> : <Navigate to="/" />} />
+        <Route path="/checkout" element={
+          user?.role.toLowerCase() === "customer" ? <Checkout /> : <Navigate to="/" />} />
+        <Route path="/wishlist" element={
+          user?.role.toLowerCase() === "customer" ? <Wishlist /> : <Navigate to="/" />} />
+        <Route path="/profile" element={
+          user?.role.toLowerCase() === "customer" ? <Profile /> : <Navigate to="/" />} />
+        <Route path="/orders" element={
+          user?.role.toLowerCase() === "customer" ? <OrderTracking /> : <Navigate to="/" />} />
 
         {/* Product routes */}
         <Route path="/jewellery" element={<Jewellery />} />
