@@ -4355,6 +4355,9 @@ app.patch('/addresses/:id', authenticateJWT,updateAddress);
 app.post('/auth/register', registerUser);
 app.post('/auth/login', loginUser);
 app.get('/users/:id', getUserProfile);
+app.patch('/users/:id', authenticateJWT,updateUserProfile);
+app.patch('/users/:id/password', authenticateJWT,changePassword);
+
 
 // Stripe webhook route (no authentication needed)
 app.post('/webhook/stripe', stripeWebhook);
