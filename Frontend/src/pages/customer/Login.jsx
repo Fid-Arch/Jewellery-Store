@@ -28,6 +28,7 @@ export default function CustomerLogin() {
 
       const { user } = result;
       login({
+        ...user,
         email: normalizedEmail,
         role: user.role.toLowerCase(),
         token: result.token

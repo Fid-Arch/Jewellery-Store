@@ -202,18 +202,17 @@ async function registerUser(req,res) {
 // User Login
 async function loginUser(req,res) {
     try {
-        console.log("login liao")
         const {email,password} = req.body
 
         if(!email || !password) {
             return res.status(400).json({Message: 'Email and Password are required'});
         }
         const [users] = await pool.query(`
-            SELECT u.user_id, u.firstName, u.lastName, u.email, u.password_hash, u.roles_id, r.role_name
+            SELECT u.user_id, u.firstName, u.lastName, u.email, u.password_hash, u.roles_id, r.role_name, u.createdAt
             FROM users u
             LEFT JOIN roles r ON u.roles_id = r.roles_id
             WHERE u.email = ?`, [email]);
-        console.log("every", users)
+            
         if (users.length === 0) {
             return res.status(401).json({Message: 'Invalid Email or Password'});
         }
@@ -231,7 +230,8 @@ async function loginUser(req,res) {
                 firstName: user.firstName,
                 lastName: user.lastName,
                 email: user.email,
-                role: user.role_name
+                role: user.role_name,
+                createdAt: user.createdAt
             }
         });
     }
