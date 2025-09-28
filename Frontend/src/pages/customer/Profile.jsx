@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useStore } from "../../context/StoreContext"; // ✅ Import context hook
+import { useStore } from "../../context/StoreContext";
 import { updateUserProfile, getUserProfile } from "../../utils/api";
 
 const dummyOrders = [
@@ -29,13 +29,21 @@ const dummyOrders = [
 
 export default function Profile() {
   const navigate = useNavigate();
-  const { user, wishlist, login } = useStore(); // ✅ Destructure user (and wishlist for dynamic count)
+  const { user, wishlist, login } = useStore();
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
   const [editForm, setEditForm] = useState({
     firstName: user?.firstName || "",
     lastName: user?.lastName || "",
     email: user?.email || "",
     phoneNumber: user?.phoneNumber || "",
+    address: user?.address || {
+      address_line1: "",
+      address_line2: "",
+      postcode: "",
+      state: "",
+      country: "",
+    },
   });
   const [updating, setUpdating] = useState(false);
   const [updateError, setUpdateError] = useState(null);
@@ -60,6 +68,13 @@ export default function Profile() {
           lastName: data.user.lastName || "",
           email: data.user.email || "",
           phoneNumber: data.user.phoneNumber || "",
+          address: data.user.address || {
+            address_line1: "",
+            address_line2: "",
+            postcode: "",
+            state: "",
+            country: "",
+          },
         });
 
         const updatedUser = { ...user, ...data.user };
@@ -76,6 +91,13 @@ export default function Profile() {
           lastName: user.lastName || "",
           email: user.email || "",
           phoneNumber: user.phoneNumber || "",
+          address: user.address || {
+            address_line1: "",
+            address_line2: "",
+            postcode: "",
+            state: "",
+            country: "",
+          },
         });
       } finally {
         setLoadingProfile(false);
@@ -85,7 +107,6 @@ export default function Profile() {
     fetchProfile();
   }, [user?.id, login, hasFetched]);
 
-  // ✅ Helper to format member since (assumes user.createdAt; adjust if different)
   const getMemberSince = () => {
     if (user?.createdAt) {
       return new Date(user.createdAt).getFullYear(); // e.g., "2025"
@@ -95,7 +116,16 @@ export default function Profile() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setEditForm((prev) => ({ ...prev, [name]: value }));
+    if (name.startsWith("address.")) {
+      // Handle nested address fields (e.g., "address.street")
+      const field = name.split(".")[1];
+      setEditForm((prev) => ({
+        ...prev,
+        address: { ...prev.address, [field]: value },
+      }));
+    } else {
+      setEditForm((prev) => ({ ...prev, [name]: value }));
+    }
     if (updateError) setUpdateError(null); // Clear error on change
   };
 
@@ -118,6 +148,12 @@ export default function Profile() {
       return;
     }
 
+    const hasAddress = editForm.address.postcode && editForm.address.country;
+    if (isEditingAddress && !hasAddress) {
+      setUpdateError("Please provide at least city and country for address.");
+      return;
+    }
+
     setUpdating(true);
     setUpdateError(null);
 
@@ -129,6 +165,7 @@ export default function Profile() {
           lastName: editForm.lastName.trim(),
           email: editForm.email.trim().toLowerCase(),
           phoneNumber: editForm.phoneNumber.trim(),
+          address: editForm.address,
         }, // updateData
         user.token // token
       );
@@ -136,13 +173,15 @@ export default function Profile() {
       // Update context with new user data
       login({
         ...user,
-        firstName: data.user.firstName, // Assume response has { user: { ... } }
+        firstName: data.user.firstName,
         lastName: data.user.lastName,
         email: data.user.email,
         phoneNumber: data.user.phoneNumber,
+        address: data.user.address,
       });
 
       setIsEditing(false);
+      setIsEditingAddress(false);
     } catch (err) {
       console.error("Update profile error:", err);
       setUpdateError(err.message || "Failed to update profile");
@@ -157,10 +196,20 @@ export default function Profile() {
       lastName: user?.lastName || "",
       email: user?.email || "",
       phoneNumber: user?.phoneNumber || "",
+      address: user?.address || {
+        address_line1: "",
+        address_line2: "",
+        postcode: "",
+        state: "",
+        country: "",
+      },
     });
     setIsEditing(false);
+    setIsEditingAddress(false);
     setUpdateError(null);
   };
+
+  const hasAddress = user?.address && (user.address.postcode || user.address.country);
 
   if (loadingProfile) {
     return (
@@ -253,7 +302,7 @@ export default function Profile() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Phone Number {/* ✅ New: Phone input */}
+                Phone Number
               </label>
               <input
                 type="tel" // ✅ type="tel" for phone
@@ -304,6 +353,138 @@ export default function Profile() {
             <p className="text-gray-600">
               Member since: {getMemberSince()}
             </p>
+          </div>
+        )}
+      </div>
+
+      {/* Address Section */}
+      <div className="bg-white rounded-xl shadow-md p-6 border border-yellow-400/40 mb-10">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold text-gray-800">Shipping Address</h2>
+          {!isEditingAddress && (
+            <button
+              onClick={() => setIsEditingAddress(true)}
+              className="text-yellow-600 hover:underline text-sm font-medium"
+            >
+              {hasAddress ? "Edit Address" : "Add Address"} {/* ✅ Dynamic button text */}
+            </button>
+          )}
+        </div>
+        {isEditingAddress ? (
+          // ✅ Address Edit Form
+          <form className="space-y-4">
+            {updateError && <p className="text-red-500 text-sm">{updateError}</p>}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Address Line 1
+              </label>
+              <input
+                type="text"
+                name="address.address_line1"
+                value={editForm.address.address_line1}
+                onChange={handleInputChange}
+                className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-yellow-500"
+                placeholder="123 Main St"
+                disabled={updating}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Address Line 2 (Optional)
+              </label>
+              <input
+                type="text"
+                name="address.address_line2"
+                value={editForm.address.address_line2}
+                onChange={handleInputChange}
+                className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-yellow-500"
+                placeholder="Apartment 4B"
+                disabled={updating}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Postcode
+                </label>
+                <input
+                  type="text"
+                  name="address.postcode"
+                  value={editForm.address.postcode}
+                  onChange={handleInputChange}
+                  className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-yellow-500"
+                  required
+                  disabled={updating}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  State/Province
+                </label>
+                <input
+                  type="text"
+                  name="address.state"
+                  value={editForm.address.state}
+                  onChange={handleInputChange}
+                  className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-yellow-500"
+                  placeholder="CA"
+                  disabled={updating}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Country
+              </label>
+              <input
+                type="text"
+                name="address.country"
+                value={editForm.address.country}
+                onChange={handleInputChange}
+                className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-yellow-500"
+                required
+                placeholder="United States"
+                disabled={updating}
+              />
+            </div>
+            <div className="flex space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={updating || !editForm.address.postcode || !editForm.address.country}
+                className="btn-primary px-4 py-2 disabled:opacity-50"
+              >
+                {updating ? "Saving..." : "Save Address"}
+              </button>
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={updating}
+                className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          // ✅ Address View Mode
+          <div className="space-y-2">
+            {hasAddress ? (
+              // ✅ Display saved address
+              <div className="text-gray-600">
+                <p><strong>Address Line 1:</strong> {user.address.address_line1 || "N/A"}</p>
+                <p><strong>Address Line 2:</strong> {user.address.address_line2 || "N/A"}</p>
+                <p><strong>Postcode:</strong> {user.address.postcode || "N/A"}</p>
+                <p><strong>State:</strong> {user.address.state || "N/A"}</p>
+                <p><strong>Country:</strong> {user.address.country || "N/A"}</p>
+              </div>
+            ) : (
+              // ✅ No address saved
+              <div className="text-center py-4">
+                <p className="text-gray-500 mb-4">No shipping address saved.</p>
+                <p className="text-sm text-gray-400">Add an address to streamline your checkout.</p>
+              </div>
+            )}
           </div>
         )}
       </div>
