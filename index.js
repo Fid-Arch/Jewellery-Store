@@ -8,8 +8,6 @@ const jwt = require('jsonwebtoken');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const notificationService = require('./services/notificationService');
 
-
-
 // 2. Initialize Express APP
 const app = express();
 const port = process.env.PORT || 3000;
@@ -22,6 +20,7 @@ app.use('/webhook/stripe', express.raw({ type: 'application/json' }));
 
 // Regular JSON parser for all other routes
 app.use(express.json());
+
 
 // 4.Database Connection Configuration
 const dbConfig = {
@@ -241,6 +240,69 @@ async function loginUser(req,res) {
     }
 };
 
+//Update User Profile
+async function updateUserProfile(req,res) {
+    try {
+        const user_id = req.user.user_id;
+        const {firstName, lastName, email, phoneNumber} = req.body;
+
+        if(!firstName && !lastName && !email && !phoneNumber) {
+            return res.status(400).json({Message: 'At least one field is required to update'});
+        }
+
+        // Check if email is being updated and if it's already in use by another user
+        if (email) {
+            const [existingUser] = await pool.query('SELECT user_id FROM users WHERE email = ? AND user_id != ?', [email, user_id]);
+            if (existingUser.length > 0) {
+                return res.status(400).json({Message: 'Email already in use by another account'});
+            }
+        }
+
+        // Build dynamic update query based on provided fields
+        const updateFields = [];
+        const updateValues = [];
+
+        if (firstName) {
+            updateFields.push('firstName = ?');
+            updateValues.push(firstName);
+        }
+        if (lastName) {
+            updateFields.push('lastName = ?');
+            updateValues.push(lastName);
+        }
+        if (email) {
+            updateFields.push('email = ?');
+            updateValues.push(email);
+        }
+        if (phoneNumber) {
+            updateFields.push('phoneNumber = ?');
+            updateValues.push(phoneNumber);
+        }
+
+        // Add user_id for WHERE clause
+        updateValues.push(user_id);
+
+        const updateQuery = `UPDATE users SET ${updateFields.join(', ')} WHERE user_id = ?`;
+        const [result] = await pool.query(updateQuery, updateValues);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({Message: 'User not found'});
+        }
+
+        // Fetch updated user data (excluding password)
+        const [updatedUser] = await pool.query('SELECT user_id, firstName, lastName, email, phoneNumber, createdAt FROM users WHERE user_id = ?', [user_id]);
+
+        res.status(200).json({
+            Message: 'Profile updated successfully',
+            user: updatedUser[0]
+        });
+
+    }
+    catch(error) {
+        console.error("ERROR updating User Profile:", error);
+        res.status(500).json({Message: 'Error updating User Profile'});
+    }
+};
 // Change Password
 async function changePassword(req,res) {
     try{
@@ -996,12 +1058,6 @@ async function createOrder(req,res){
                 );
             }
         }
-
-        const deleteCartItems = 'DELETE FROM cart_items WHERE cart_id = ?';
-        await connection.query(deleteCartItems, [cart_id]);
-
-        await connection.commit();
-
         // Send order confirmation email and SMS
         try {
             // Get user details for notifications
@@ -4293,9 +4349,9 @@ app.get('/', (req,res) => {
 app.post('/roles', createRoles);
 app.delete('/roles/:id', deleteRole);
 app.get('/users', getAllUsers);
-app.post('/addresses', createAddress);
+app.post('/addresses', authenticateJWT, createAddress);
 app.delete('/addresses/:id', deleteAddress);
-app.patch('/addresses/:id', updateAddress);
+app.patch('/addresses/:id', authenticateJWT,updateAddress);
 app.post('/auth/register', registerUser);
 app.post('/auth/login', loginUser);
 app.get('/users/:id', getUserProfile);
@@ -4306,7 +4362,7 @@ app.post('/webhook/stripe', stripeWebhook);
 // Product routes
 app.get('/products', getAllProducts);
 app.get('/products/:id', getProductById);
-app.patch('/products/:id', updateProduct);
+app.patch('/products/:id', authenticateJWT, authorizeAdminJWT,updateProduct);
 app.delete('/products/:id', deleteProduct);
 
 // Category routes
@@ -4365,9 +4421,9 @@ app.put('/shipping/addresses/:addressId/default', authenticateJWT, setDefaultShi
 app.post('/shipping/validate-address', validateShippingAddress);
 
 // CART ROUTES API Routes
-app.post('/cart/items', authenticateJWT, addItemToCart);
+app.post('/cart/items', authenticateJWT,addItemToCart);
 app.get('/cart', authenticateJWT, getUserCart);
-app.patch('/cart/items/:cartItemId', authenticateJWT, updateCartItem);
+app.patch('/cart/items/:cartItemId', authenticateJWT,updateCartItem);
 app.delete('/cart/items/:cartItemId', authenticateJWT, removeCartItem);
 app.delete('/cart', authenticateJWT, clearCart);
 
@@ -4410,8 +4466,9 @@ app.put('/user/notification-preferences', authenticateJWT, updateNotificationPre
 // // Test notification (development only)
 // app.post('/test-notification', authenticateJWT, testNotification);
 
+
 //7. RUN
-app.listen(3000,()=>{
+app.listen(3000, () => {
     console.log(`Server is running on port ${port}`)
 });
 
