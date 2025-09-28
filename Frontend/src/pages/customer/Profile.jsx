@@ -1,6 +1,7 @@
-import React from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStore } from "../../context/StoreContext"; // ✅ Import context hook
+import { updateUserProfile } from "../../utils/api";
 
 const dummyOrders = [
   {
@@ -28,7 +29,15 @@ const dummyOrders = [
 
 export default function Profile() {
   const navigate = useNavigate();
-  const { user, wishlist } = useStore(); // ✅ Destructure user (and wishlist for dynamic count)
+  const { user, wishlist, login } = useStore(); // ✅ Destructure user (and wishlist for dynamic count)
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    firstName: user?.firstName || "",
+    lastName: user?.lastName || "",
+    email: user?.email || "",
+  });
+  const [updating, setUpdating] = useState(false);
+  const [updateError, setUpdateError] = useState(null);
 
   // ✅ Helper to format member since (assumes user.createdAt; adjust if different)
   const getMemberSince = () => {
@@ -36,6 +45,64 @@ export default function Profile() {
       return new Date(user.createdAt).getFullYear(); // e.g., "2025"
     }
     return "Recent"; // Fallback if no date
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setEditForm((prev) => ({ ...prev, [name]: value }));
+    if (updateError) setUpdateError(null); // Clear error on change
+  };
+
+  const handleSave = async () => {
+    if (!user) return;
+
+    // ✅ Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(editForm.email)) {
+      setUpdateError("Please enter a valid email address.");
+      setUpdating(false);
+      return;
+    }
+
+    setUpdating(true);
+    setUpdateError(null);
+
+    try {
+      const data = await updateUserProfile(
+        user.id, // userId
+        {
+          firstName: editForm.firstName.trim(),
+          lastName: editForm.lastName.trim(),
+          email: editForm.email.trim().toLowerCase(),
+        }, // updateData
+        user.token // token
+      );
+
+      // Update context with new user data
+      login({
+        ...user,
+        firstName: data.user.firstName, // Assume response has { user: { ... } }
+        lastName: data.user.lastName,
+        email: data.user.email,
+      });
+
+      setIsEditing(false);
+    } catch (err) {
+      console.error("Update profile error:", err);
+      setUpdateError(err.message || "Failed to update profile");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setEditForm({
+      firstName: user?.firstName || "",
+      lastName: user?.lastName || "",
+      email: user?.email || "",
+    });
+    setIsEditing(false);
+    setUpdateError(null);
   };
 
   // ✅ Fallback if no user (shouldn't happen due to route guard)
@@ -61,20 +128,101 @@ export default function Profile() {
 
       {/* Account Info - Dynamic from user */}
       <div className="bg-white rounded-xl shadow-md p-6 border border-yellow-400/40 mb-10">
-        <h2 className="text-xl font-semibold mb-4 text-gray-800">
-          Account Details
-        </h2>
-        <p className="text-gray-600">
-          Name: {user.firstName && user.lastName 
-            ? `${user.firstName} ${user.lastName}` 
-            : user.email || "N/A"}
-        </p>
-        <p className="text-gray-600">
-          Email: {user.email || "N/A"}
-        </p>
-        <p className="text-gray-600">
-          Member since: {getMemberSince()}
-        </p>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold text-gray-800">Account Details</h2>
+          {!isEditing && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="text-yellow-600 hover:underline text-sm font-medium"
+            >
+              Edit Profile
+            </button>
+          )}
+        </div>
+        {isEditing ? (
+          // ✅ Edit Form
+          <form className="space-y-4">
+            {updateError && <p className="text-red-500 text-sm">{updateError}</p>}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                First Name
+              </label>
+              <input
+                type="text"
+                name="firstName"
+                value={editForm.firstName}
+                onChange={handleInputChange}
+                className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-yellow-500"
+                required
+                disabled={updating}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Last Name
+              </label>
+              <input
+                type="text"
+                name="lastName"
+                value={editForm.lastName}
+                onChange={handleInputChange}
+                className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-yellow-500"
+                required
+                disabled={updating}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email
+              </label>
+              <input
+                type="email" // ✅ Keeps type="email" for validation
+                name="email"
+                value={editForm.email}
+                onChange={handleInputChange}
+                className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-yellow-500" // ✅ Removed bg-gray-100
+                required
+                disabled={updating}
+              />
+            </div>
+            <div className="flex space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={updating || !editForm.firstName || !editForm.lastName}
+                className="btn-primary px-4 py-2 disabled:opacity-50"
+              >
+                {updating ? "Saving..." : "Save Changes"}
+              </button>
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={updating}
+                className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Member since: {getMemberSince()}
+            </p>
+          </form>
+        ) : (
+          // ✅ View Mode
+          <div className="space-y-2">
+            <p className="text-gray-600">
+              Name: {user.firstName && user.lastName 
+                ? `${user.firstName} ${user.lastName}` 
+                : user.email || "N/A"}
+            </p>
+            <p className="text-gray-600">
+              Email: {user.email || "N/A"}
+            </p>
+            <p className="text-gray-600">
+              Member since: {getMemberSince()}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Orders - Still dummy;*/}

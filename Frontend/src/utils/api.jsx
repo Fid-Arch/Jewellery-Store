@@ -39,7 +39,29 @@ async function registerUser(data) {
     }
 }
 
+async function updateUserProfile(userId, updateData, token) {
+    try {
+        const response = await fetch(`http://localhost:3000/users/${userId}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${token}`, // ✅ Auth with token
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(updateData)
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || 'Update failed');
+        }
+        return result; // e.g., { user: { id, firstName, lastName, ... } }
+    } catch (error) {
+        console.error('Error updating user profile:', error);
+        throw error;
+    }
+}
+
 export {
     registerUser,
     loginUser,
+    updateUserProfile,
 };
