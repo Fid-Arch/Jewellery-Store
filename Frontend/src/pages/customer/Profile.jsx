@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStore } from "../../context/StoreContext"; // ✅ Import context hook
-import { updateUserProfile } from "../../utils/api";
+import { updateUserProfile, getUserProfile } from "../../utils/api";
 
 const dummyOrders = [
   {
@@ -35,9 +35,55 @@ export default function Profile() {
     firstName: user?.firstName || "",
     lastName: user?.lastName || "",
     email: user?.email || "",
+    phoneNumber: user?.phoneNumber || "",
   });
   const [updating, setUpdating] = useState(false);
   const [updateError, setUpdateError] = useState(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [hasFetched, setHasFetched] = useState(false);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user || hasFetched) {
+        setLoadingProfile(false);
+        return;
+      }
+
+      try {
+        setLoadingProfile(true);
+        setUpdateError(null);
+        const data = await getUserProfile(user.id, user.token); // ✅ Fetch latest profile (assumes { user: { ..., phone } })
+
+        // Update edit form with fetched data
+        setEditForm({
+          firstName: data.user.firstName || "",
+          lastName: data.user.lastName || "",
+          email: data.user.email || "",
+          phoneNumber: data.user.phoneNumber || "",
+        });
+
+        const updatedUser = { ...user, ...data.user };
+        if (JSON.stringify(updatedUser) !== JSON.stringify(user)) { // Simple diff check
+          login(updatedUser);
+        }
+
+        setHasFetched(true); // ✅ Mark as fetched
+      } catch (err) {
+        console.error("Fetch profile error:", err);
+        setUpdateError(err.message || "Failed to load profile details");
+        setEditForm({
+          firstName: user.firstName || "",
+          lastName: user.lastName || "",
+          email: user.email || "",
+          phoneNumber: user.phoneNumber || "",
+        });
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+
+    fetchProfile();
+  }, [user?.id, login, hasFetched]);
 
   // ✅ Helper to format member since (assumes user.createdAt; adjust if different)
   const getMemberSince = () => {
@@ -64,6 +110,14 @@ export default function Profile() {
       return;
     }
 
+    // ✅ Basic phone validation (optional; adjust regex as needed)
+    const phoneRegex = /^\+?[\d\s\-\(\)]{10,15}$/; // e.g., +1-123-456-7890 or 1234567890
+    if (editForm.phoneNumber && !phoneRegex.test(editForm.phoneNumber)) {
+      setUpdateError("Please enter a valid phone number.");
+      setUpdating(false);
+      return;
+    }
+
     setUpdating(true);
     setUpdateError(null);
 
@@ -74,6 +128,7 @@ export default function Profile() {
           firstName: editForm.firstName.trim(),
           lastName: editForm.lastName.trim(),
           email: editForm.email.trim().toLowerCase(),
+          phoneNumber: editForm.phoneNumber.trim(),
         }, // updateData
         user.token // token
       );
@@ -84,6 +139,7 @@ export default function Profile() {
         firstName: data.user.firstName, // Assume response has { user: { ... } }
         lastName: data.user.lastName,
         email: data.user.email,
+        phoneNumber: data.user.phoneNumber,
       });
 
       setIsEditing(false);
@@ -100,10 +156,20 @@ export default function Profile() {
       firstName: user?.firstName || "",
       lastName: user?.lastName || "",
       email: user?.email || "",
+      phoneNumber: user?.phoneNumber || "",
     });
     setIsEditing(false);
     setUpdateError(null);
   };
+
+  if (loadingProfile) {
+    return (
+      <div className="max-w-5xl mx-auto px-6 py-16 text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">Loading profile...</p>
+      </div>
+    );
+  }
 
   // ✅ Fallback if no user (shouldn't happen due to route guard)
   if (!user) {
@@ -185,6 +251,20 @@ export default function Profile() {
                 disabled={updating}
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Phone Number {/* ✅ New: Phone input */}
+              </label>
+              <input
+                type="tel" // ✅ type="tel" for phone
+                name="phoneNumber"
+                value={editForm.phoneNumber}
+                onChange={handleInputChange}
+                className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-yellow-500"
+                placeholder="e.g., +1-123-456-7890"
+                disabled={updating}
+              />
+            </div>
             <div className="flex space-x-3 pt-4">
               <button
                 type="button"
@@ -217,6 +297,9 @@ export default function Profile() {
             </p>
             <p className="text-gray-600">
               Email: {user.email || "N/A"}
+            </p>
+            <p className="text-gray-600">
+              Phone: {user.phoneNumber || "N/A"}
             </p>
             <p className="text-gray-600">
               Member since: {getMemberSince()}

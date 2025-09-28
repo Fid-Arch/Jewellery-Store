@@ -60,8 +60,29 @@ async function updateUserProfile(userId, updateData, token) {
     }
 }
 
+async function getUserProfile(userId, token) {
+    try {
+        const response = await fetch(`http://localhost:3000/users/${userId}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`, // ✅ Auth with token
+                'Content-Type': 'application/json'
+            }
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || 'Fetch failed');
+        }
+        return result; // e.g., { user: { id, firstName, lastName, email, ... } }
+    } catch (error) {
+        console.error('Error fetching user profile:', error);
+        throw error;
+    }
+}
+
 export {
     registerUser,
     loginUser,
     updateUserProfile,
+    getUserProfile,
 };
