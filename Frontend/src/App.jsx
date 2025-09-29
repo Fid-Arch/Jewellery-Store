@@ -90,17 +90,18 @@ function App() {
           element={user ? <Navigate to="/" /> : <AdminRegister />}
         />
 
-        {/* Customer routes */}
-        <Route path="/cart" element={
-          user?.role.toLowerCase() === "customer" ? <Cart /> : <Navigate to="/" />} />
+        {/* Customer routes - Cart accessible to guests and customers */}
+        <Route path="/cart" element={<Cart />} />
+        
+        {/* Customer-only routes (require login) */}
         <Route path="/checkout" element={
-          user?.role.toLowerCase() === "customer" ? <Checkout /> : <Navigate to="/" />} />
+          user?.role.toLowerCase() === "customer" ? <Checkout /> : <Navigate to="/login" />} />
         <Route path="/wishlist" element={
-          user?.role.toLowerCase() === "customer" ? <Wishlist /> : <Navigate to="/" />} />
+          user?.role.toLowerCase() === "customer" ? <Wishlist /> : <Navigate to="/login" />} />
         <Route path="/profile" element={
-          user?.role.toLowerCase() === "customer" ? <Profile /> : <Navigate to="/" />} />
+          user?.role.toLowerCase() === "customer" ? <Profile /> : <Navigate to="/login" />} />
         <Route path="/orders" element={
-          user?.role.toLowerCase() === "customer" ? <OrderTracking /> : <Navigate to="/" />} />
+          user?.role.toLowerCase() === "customer" ? <OrderTracking /> : <Navigate to="/login" />} />
 
         {/* Product routes */}
         <Route path="/jewellery" element={<Jewellery />} />

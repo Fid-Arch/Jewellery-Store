@@ -6,36 +6,73 @@ export default function Cart() {
   const { cart, removeFromCart, updateQty, user, isLoading } = useStore();
   const [cartData, setCartData] = useState({ items: [], total_amount: 0 });
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
 
   // Handle different cart data structures (local vs backend)
   useEffect(() => {
-    if (user?.token && Array.isArray(cart)) {
-      // Backend cart structure
-      setCartData({
-        items: cart,
-        total_amount: cart.reduce((sum, item) => sum + (item.price * item.qty), 0)
-      });
-    } else if (!user?.token && Array.isArray(cart)) {
-      // Local cart structure
-      setCartData({
-        items: cart,
-        total_amount: cart.reduce((sum, item) => sum + (item.price * (item.quantity || item.qty || 1)), 0)
-      });
-    } else if (cart && cart.items) {
-      // Backend response structure
+    // Don't process cart if it's still null (not hydrated yet)
+    if (cart === null) {
+      return;
+    }
+    
+    if (user?.token && cart?.items && Array.isArray(cart.items)) {
+      // Backend cart structure with proper data
       setCartData(cart);
+    } else if (Array.isArray(cart)) {
+      // Array structure (local cart or fallback)
+      setCartData({
+        items: cart,
+        total_amount: cart.reduce((sum, item) => {
+          const price = item.price || item.min_price;
+          const validPrice = price && !isNaN(price) ? Number(price) : 0;
+          const qty = item.qty || item.quantity || 1;
+          return sum + (validPrice * qty);
+        }, 0)
+      });
+    } else {
+      // Empty cart or invalid structure fallback
+      setCartData({ items: [], total_amount: 0 });
     }
   }, [cart, user]);
+
+  // Clear message after 5 seconds
+  useEffect(() => {
+    if (message.text) {
+      const timer = setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
 
   const handleQuantityChange = async (item, newQty) => {
     if (newQty < 1) return;
     setLoading(true);
     try {
-      // Use the appropriate ID based on cart structure
-      const itemId = item.product_item_id || item.id;
-      await updateQty(itemId, newQty);
+      // For logged-in users, we MUST have cart_item_id for backend updates
+      // For guests, we can use product IDs for local cart updates
+      if (user?.token) {
+        // Backend cart - ONLY use cart_item_id
+        if (!item.cart_item_id) {
+          setMessage({ 
+            type: 'error', 
+            text: 'This item needs to be re-added to update quantities. Please remove and add it again.' 
+          });
+          return;
+        }
+        await updateQty(item.cart_item_id, newQty);
+      } else {
+        // Guest cart - use product identifiers for local updates
+        const itemId = item.id || item.product_id || item.product_item_id;
+        if (!itemId) {
+          throw new Error('No valid item ID found for guest cart');
+        }
+        await updateQty(itemId, newQty);
+      }
     } catch (error) {
       console.error('Failed to update quantity:', error);
+      setMessage({ 
+        type: 'error', 
+        text: 'Failed to update quantity. Please try refreshing the page.' 
+      });
     } finally {
       setLoading(false);
     }
@@ -44,11 +81,46 @@ export default function Cart() {
   const handleRemoveItem = async (item) => {
     setLoading(true);
     try {
-      // Use the appropriate ID based on cart structure
-      const itemId = item.product_item_id || item.id;
-      await removeFromCart(itemId);
+      // For logged-in users, we MUST have cart_item_id for backend removal
+      // For guests, we can use product IDs for local cart removal
+      if (user?.token) {
+        // Backend cart - ONLY use cart_item_id
+        if (!item.cart_item_id) {
+          // For items without cart_item_id, remove from localStorage manually
+          console.log('Removing stale item from localStorage');
+          const savedUserCart = JSON.parse(localStorage.getItem('userCart') || '{"items": [], "total_amount": 0}');
+          savedUserCart.items = savedUserCart.items.filter(localItem => 
+            localItem.product_id !== item.product_id
+          );
+          localStorage.setItem('userCart', JSON.stringify(savedUserCart));
+          
+          // Update the current cart state
+          setCartData(prev => ({
+            ...prev,
+            items: prev.items.filter(localItem => localItem.product_id !== item.product_id)
+          }));
+          
+          setMessage({ 
+            type: 'success', 
+            text: 'Item removed successfully.' 
+          });
+          return;
+        }
+        await removeFromCart(item.cart_item_id);
+      } else {
+        // Guest cart - use product identifiers for local removal
+        const itemId = item.id || item.product_id || item.product_item_id;
+        if (!itemId) {
+          throw new Error('No valid item ID found for guest cart');
+        }
+        await removeFromCart(itemId);
+      }
     } catch (error) {
       console.error('Failed to remove item:', error);
+      setMessage({ 
+        type: 'error', 
+        text: 'Failed to remove item. Please try refreshing the page.' 
+      });
     } finally {
       setLoading(false);
     }
@@ -62,9 +134,38 @@ export default function Cart() {
     );
   }
 
+  const clearAllCartData = () => {
+    localStorage.removeItem('userCart');
+    localStorage.removeItem('cart');
+    setCartData({ items: [], total_amount: 0 });
+    setMessage({ type: 'success', text: 'Cart cleared successfully! You can now add items fresh.' });
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-6 py-16">
-      <h1 className="text-3xl font-serif text-gold mb-6">My Cart</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-serif text-gold">My Cart</h1>
+        {cartData.items.length > 0 && (
+          <button
+            onClick={clearAllCartData}
+            className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 text-sm"
+          >
+            Clear Cart Data
+          </button>
+        )}
+      </div>
+      
+      {/* Message Display */}
+      {message.text && (
+        <div className={`mb-6 p-4 rounded-lg ${
+          message.type === 'success' 
+            ? 'bg-green-50 border border-green-200 text-green-800' 
+            : 'bg-red-50 border border-red-200 text-red-800'
+        }`}>
+          {message.text}
+        </div>
+      )}
+      
       {cartData.items.length === 0 ? (
         <p className="text-gray-600 text-center py-20">Your cart is empty.</p>
       ) : (
@@ -101,7 +202,10 @@ export default function Cart() {
                     </div>
                   </td>
                   <td className="text-sm text-gray-600">{item.sku || 'N/A'}</td>
-                  <td>${Number(item.price).toFixed(2)}</td>
+                  <td>${(() => {
+                    const price = item.price || item.min_price;
+                    return price && !isNaN(price) ? Number(price).toFixed(2) : '0.00';
+                  })()}</td>
                   <td>
                     <input
                       type="number"
@@ -118,7 +222,11 @@ export default function Cart() {
                       </p>
                     )}
                   </td>
-                  <td>${(Number(item.price) * (item.qty || item.quantity || 1)).toFixed(2)}</td>
+                  <td>${(() => {
+                    const price = item.price || item.min_price;
+                    const qty = item.qty || item.quantity || 1;
+                    return price && !isNaN(price) ? (Number(price) * qty).toFixed(2) : '0.00';
+                  })()}</td>
                   <td>
                     <button
                       onClick={() => handleRemoveItem(item)}
@@ -134,14 +242,23 @@ export default function Cart() {
           </table>
           <div className="flex justify-between items-center">
             <p className="text-xl font-semibold text-gray-800">
-              Subtotal: ${Number(cartData.total_amount).toFixed(2)}
+              Subtotal: ${cartData.total_amount && !isNaN(cartData.total_amount) ? Number(cartData.total_amount).toFixed(2) : '0.00'}
             </p>
-            <Link
-              to="/checkout"
-              className="bg-gold text-white px-6 py-3 rounded-md hover:bg-yellow-600 transition"
-            >
-              Proceed to Checkout
-            </Link>
+            {user?.token ? (
+              <Link
+                to="/checkout"
+                className="bg-gold-500 text-white px-6 py-3 rounded-md hover:bg-yellow-600 transition font-semibold shadow-lg"
+              >
+                Proceed to Checkout
+              </Link>
+            ) : (
+              <Link
+                to="/login"
+                className="bg-gold-500 text-white px-6 py-3 rounded-md hover:bg-yellow-600 transition font-semibold shadow-lg border-2 border-gold-400"
+              >
+                Login to Checkout
+              </Link>
+            )}
           </div>
         </>
       )}
