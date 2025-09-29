@@ -28,23 +28,36 @@ export default function ProductCard({ product }) {
 
         {/* Product Image */}
         <img
-          src={product.image_url}
-          alt={product.name}
+          src={product.product_image || product.image_url || '/placeholder-product.jpg'}
+          alt={product.productname || product.name}
           className="w-full h-64 object-cover group-hover:scale-105 transition duration-500"
+          onError={(e) => {
+            e.target.src = 'https://via.placeholder.com/300x300/f3f4f6/9ca3af?text=No+Image';
+          }}
         />
       </div>
 
       {/* Product Info */}
       <div className="p-4">
         <h3 className="font-serif font-semibold text-lg text-gray-800">
-          {product.name}
+          {product.productname || product.name}
         </h3>
-        <p className="text-gray-600 mb-4">${product.price}</p>
+        <p className="text-gray-600 text-sm mb-2">
+          {product.category_name || product.category}
+        </p>
+        <p className="text-gray-600 mb-4">
+          {product.price ? `$${product.price}` : 
+           product.min_price ? 
+             (product.min_price === product.max_price ? 
+               `$${product.min_price}` : 
+               `$${product.min_price} - $${product.max_price}`) :
+             'Price on request'}
+        </p>
 
         {/* Actions */}
         <div className="flex items-center gap-2">
           <Link
-            to={`/product/${product.id}`}
+            to={`/product/${product.product_id || product.id}`}
             className="bg-gold text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition"
           >
             View

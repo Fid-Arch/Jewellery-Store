@@ -31,7 +31,7 @@ function DataTable({ columns, data }) {
                     key={j}
                     className="px-6 py-4 border-b text-sm text-gray-700"
                   >
-                    {row[col.accessor]}
+                    {col.cell ? col.cell(row) : row[col.accessor]}
                   </td>
                 ))}
               </tr>

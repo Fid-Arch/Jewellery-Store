@@ -27,6 +27,8 @@ import LuxuryCollections from "./pages/LuxuryCollections";
 import Accessories from "./pages/Accessories";
 import Gifts from "./pages/Gifts";
 import ProductDetail from "./pages/ProductDetail";
+import ProductSearch from "./pages/ProductSearch";
+import ProductAPITest from "./pages/ProductAPITest";
 
 // Admin pages
 import AdminDashboard from "./pages/admin/Dashboard";
@@ -107,6 +109,8 @@ function App() {
         <Route path="/luxury-collections" element={<LuxuryCollections />} />
         <Route path="/accessories" element={<Accessories />} />
         <Route path="/gifts" element={<Gifts />} />
+        <Route path="/search" element={<ProductSearch />} />
+        <Route path="/test-products" element={<ProductAPITest />} />
         <Route path="/product/:id" element={<ProductDetail />} />
 
         {/* Luxury Exclusive Page */}
