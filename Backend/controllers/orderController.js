@@ -6,10 +6,24 @@ async function createOrder(req, res) {
     let connection;
     try {
         const user_id = req.user.user_id;
-        const { shipping_method, shipping_address, process_payment_id } = req.body;
+        const { 
+            shipping_method_id, 
+            shipping_address_id, 
+            shipping_cost = 0,
+            subtotal,
+            total_amount,
+            payment_method, 
+            payment_intent_id, 
+            stripe_payment_method_id 
+        } = req.body;
 
-        if (!shipping_method || !shipping_address || process_payment_id === undefined) {
-            return res.status(400).json({ Message: 'Missing required fields' });
+        if (!shipping_method_id || !shipping_address_id) {
+            return res.status(400).json({ Message: 'Missing required fields: shipping_method_id and shipping_address_id are required' });
+        }
+
+        // For Stripe payments, require payment_intent_id
+        if (payment_method === 'stripe' && !payment_intent_id) {
+            return res.status(400).json({ Message: 'Payment intent ID is required for Stripe payments' });
         }
 
         connection = await pool.getConnection();
@@ -35,16 +49,31 @@ async function createOrder(req, res) {
             return res.status(400).json({ Message: 'Cart is Empty' });
         }
 
-        const total_amount = items.reduce((total, item) => total + (item.price * item.qty), 0);
+        // Use total_amount from frontend (includes shipping) or calculate if not provided
+        const calculated_subtotal = items.reduce((total, item) => total + (item.price * item.qty), 0);
+        const final_total = total_amount || (calculated_subtotal + (shipping_cost || 0));
 
-        const order = 'INSERT INTO shop_orders (user_id, total_amount, shipping_method, shipping_address, transaction_id, payment_status, order_status) VALUES (?,?,?,?,?,?,?)';
-        const orderValues = [user_id, total_amount, shipping_method, shipping_address, process_payment_id, 'Pending', 1];
+        // Verify that the shipping address exists and belongs to the user
+        const [addressCheck] = await connection.query(
+            'SELECT a.address_id FROM address a JOIN user_address ua ON a.address_id = ua.address_id WHERE a.address_id = ? AND ua.user_id = ?',
+            [shipping_address_id, user_id]
+        );
+        
+        if (addressCheck.length === 0) {
+            await connection.rollback();
+            return res.status(400).json({ Message: 'Invalid shipping address or address does not belong to user' });
+        }
+
+        const order = 'INSERT INTO shop_orders (user_id, order_total, shipping_method_id, shipping_address_id, payment_status, order_status_id) VALUES (?,?,?,?,?,?)';
+        const orderValues = [user_id, final_total, shipping_method_id, shipping_address_id, 'Pending', 1];
         const [orderResult] = await connection.query(order, orderValues);
         const shop_order_id = orderResult.insertId;
 
         // Record payment
-        const payment = 'INSERT INTO payment (shop_order_id, amount, payment_method, payment_status,transaction_id) VALUES (?,?,?,?,?)';
-        await connection.query(payment, [shop_order_id, total_amount, 'Stripe', 'Pending', process_payment_id]);
+        const payment = 'INSERT INTO payment (shop_order_id, amount, payment_method, payment_status, transaction_id) VALUES (?,?,?,?,?)';
+        const paymentStatus = payment_method === 'stripe' ? 'Completed' : 'Pending';
+        const transactionId = payment_intent_id || null;
+        await connection.query(payment, [shop_order_id, final_total, payment_method || 'card', paymentStatus, transactionId]);
 
         // Record into the orderline
         const orderline = 'INSERT INTO order_line (shop_order_id, product_item_id, qty, price) VALUES ?';

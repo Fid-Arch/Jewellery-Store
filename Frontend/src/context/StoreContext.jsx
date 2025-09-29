@@ -342,6 +342,26 @@ export const StoreProvider = ({ children }) => {
     }
   };
 
+  const clearCart = async () => {
+    try {
+      if (user?.token) {
+        // If user is logged in, clear backend cart
+        await clearUserCart();
+      }
+      // Clear local cart in all cases
+      setCart([]);
+      localStorage.removeItem("cart");
+      localStorage.removeItem("userCart");
+      console.log('Cart cleared');
+    } catch (error) {
+      console.error('Failed to clear cart:', error);
+      // Still clear local cart even if backend clear fails
+      setCart([]);
+      localStorage.removeItem("cart");
+      localStorage.removeItem("userCart");
+    }
+  };
+
   // Logout (clears and removes)
   const logout = () => {
     setUser(null);
@@ -364,6 +384,7 @@ export const StoreProvider = ({ children }) => {
         addToCart,
         removeFromCart,
         updateQty,
+        clearCart,
         addToWishlist,
         removeFromWishlist,
         login,

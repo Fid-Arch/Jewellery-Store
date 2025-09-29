@@ -1,10 +1,33 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Heart, ShoppingCart } from "lucide-react";
+import { Heart, ShoppingCart, Star } from "lucide-react";
 import { useStore } from "../context/StoreContext";
 
 export default function ProductCard({ product }) {
   const { addToCart, addToWishlist } = useStore();
+  const [averageRating, setAverageRating] = useState(0);
+  const [reviewCount, setReviewCount] = useState(0);
+
+  useEffect(() => {
+    const fetchRating = async () => {
+      try {
+        const response = await fetch(`http://localhost:3000/reviews/products/${product.product_id || product.id}/rating`);
+        if (response.ok) {
+          const result = await response.json();
+          if (result.data) {
+            setAverageRating(result.data.averageRating || 0);
+            setReviewCount(result.data.reviewCount || 0);
+          }
+        }
+      } catch (err) {
+        // Silently fail - rating display is optional
+      }
+    };
+
+    if (product.product_id || product.id) {
+      fetchRating();
+    }
+  }, [product.product_id, product.id]);
 
   return (
     <div className="bg-white rounded-xl shadow hover:shadow-lg transition group overflow-hidden">
@@ -45,6 +68,29 @@ export default function ProductCard({ product }) {
         <p className="text-gray-600 text-sm mb-2">
           {product.category_name || product.category}
         </p>
+
+        {/* Rating Display */}
+        {averageRating > 0 && (
+          <div className="flex items-center space-x-1 mb-2">
+            <div className="flex">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <Star
+                  key={star}
+                  size={14}
+                  className={`${
+                    star <= Math.round(averageRating)
+                      ? 'text-yellow-400 fill-current'
+                      : 'text-gray-300'
+                  }`}
+                />
+              ))}
+            </div>
+            <span className="text-xs text-gray-500">
+              {averageRating.toFixed(1)} ({reviewCount})
+            </span>
+          </div>
+        )}
+
         <p className="text-gray-600 mb-4">
           {product.price ? `$${product.price}` : 
            product.min_price ? 

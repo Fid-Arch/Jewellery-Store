@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.1.1",
+    "@stripe/react-stripe-js": "^4.0.2",
+    "@stripe/stripe-js": "^7.9.0",
     "axios": "^1.6.7",
     "lucide-react": "^0.542.0",
     "node-fetch": "^3.3.2",

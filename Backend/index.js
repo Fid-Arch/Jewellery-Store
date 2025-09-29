@@ -18,6 +18,7 @@ const promotionRoutes = require('./routes/promotionRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const shippingRoutes = require('./routes/shippingRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
+const stripeRoutes = require('./routes/stripeRoutes');
 
 // Import database connection (this will initialize the connection)
 require('./config/database');
@@ -58,6 +59,7 @@ app.use('/wishlist', wishlistRoutes);
 app.use('/categories', categoryRoutes);
 app.use('/promotions', promotionRoutes);
 app.use('/payments', paymentRoutes);
+app.use('/payments', stripeRoutes); // Stripe payment endpoints
 app.use('/shipping', shippingRoutes);
 app.use('/inventory', inventoryRoutes);
 
