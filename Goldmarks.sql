@@ -325,7 +325,21 @@ CREATE TABLE promotion_usage (
 
 -- Insert data into roles
 INSERT INTO roles (role_name)
-VALUES (CUSTOMER), (ADMIN);
+VALUES ('Customer'), ('Admin');
+
+-- Insert default shipping methods
+INSERT INTO shipping_method (shipping_method_id, name, price) VALUES 
+(1, 'Standard Shipping', 0.00),
+(2, 'Express Shipping', 15.00),
+(3, 'Overnight Express', 35.00);
+
+-- Insert default order statuses
+INSERT INTO order_status (order_status_id, status) VALUES 
+(1, 'Pending'),
+(2, 'Processing'),
+(3, 'Shipped'),
+(4, 'Delivered'),
+(5, 'Cancelled');
 
 -- CREATE index
 CREATE INDEX idx_stock_notifications_status ON stock_notifications(status);
