@@ -307,13 +307,13 @@ async function getAllOrdersAdmin(req, res) {
         }
 
         const [orders] = await pool.query(`
-            SELECT so.shop_order_id, so.order_date, so.total_amount, so.payment_status,
+            SELECT so.shop_order_id, so.order_date, so.order_total, so.payment_status,
                    os.status as order_status, u.firstName, u.lastName, u.email,
                    sm.name as shipping_method
             FROM shop_orders so
             JOIN users u ON so.user_id = u.user_id
-            JOIN order_status os ON so.order_status = os.status_id
-            JOIN shipping_methods sm ON so.shipping_method = sm.shipping_method_id
+            JOIN order_status os ON so.order_status_id = os.order_status_id
+            JOIN shipping_method sm ON so.shipping_method_id = sm.shipping_method_id
             ${whereClause}
             ORDER BY so.order_date DESC
             LIMIT ? OFFSET ?`, queryParams);
@@ -321,7 +321,7 @@ async function getAllOrdersAdmin(req, res) {
         const [countResult] = await pool.query(`
             SELECT COUNT(*) as total
             FROM shop_orders so
-            JOIN order_status os ON so.order_status = os.status_id
+            JOIN order_status os ON so.order_status_id = os.order_status_id
             ${whereClause}`, status ? [status] : []);
 
         const totalOrders = countResult[0].total;

@@ -3,41 +3,64 @@ const pool = require('../config/database');
 // Get Dashboard Stats
 async function getDashboardStats(req, res) {
     try {
-        const [revenueResult] = await pool.query('SELECT SUM(total_amount) as total_revenue FROM shop_orders WHERE payment_status = "Paid"');
+        console.log('Fetching dashboard stats...');
+        
+        // Get revenue (handle null values)
+        const [revenueResult] = await pool.query(`
+            SELECT COALESCE(SUM(order_total), 0) as total_revenue 
+            FROM shop_orders 
+            WHERE payment_status IN ('Paid', 'completed', 'success')
+        `);
+        
+        // Get total orders
         const [ordersResult] = await pool.query('SELECT COUNT(*) as total_orders FROM shop_orders');
+        
+        // Get total users
         const [usersResult] = await pool.query('SELECT COUNT(*) as total_users FROM users');
+        
+        // Get total products
         const [productsResult] = await pool.query('SELECT COUNT(*) as total_products FROM products');
 
         // Get recent orders count (last 7 days)
         const [recentOrdersResult] = await pool.query(`
             SELECT COUNT(*) as recent_orders 
             FROM shop_orders 
-            WHERE order_date >= DATE_SUB(NOW(), INTERVAL 7 DAY)`);
+            WHERE order_date >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        `);
 
-        // Get monthly revenue trend
+        // Get monthly revenue trend (simplified)
         const [monthlyRevenue] = await pool.query(`
             SELECT 
                 DATE_FORMAT(order_date, '%Y-%m') as month,
-                SUM(total_amount) as revenue
+                COALESCE(SUM(order_total), 0) as revenue
             FROM shop_orders 
-            WHERE payment_status = 'Paid' 
+            WHERE payment_status IN ('Paid', 'completed', 'success')
                 AND order_date >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
             GROUP BY month
-            ORDER BY month ASC`);
+            ORDER BY month ASC
+        `);
+
+        const stats = {
+            totalRevenue: parseFloat(revenueResult[0].total_revenue) || 0,
+            totalOrders: parseInt(ordersResult[0].total_orders) || 0,
+            totalUsers: parseInt(usersResult[0].total_users) || 0,
+            totalProducts: parseInt(productsResult[0].total_products) || 0,
+            recentOrders: parseInt(recentOrdersResult[0].recent_orders) || 0,
+            monthlyRevenue: monthlyRevenue || []
+        };
+
+        console.log('Dashboard stats:', stats);
 
         res.status(200).json({
-            data: {
-                totalRevenue: parseFloat(revenueResult[0].total_revenue) || 0,
-                totalOrders: ordersResult[0].total_orders,
-                totalUsers: usersResult[0].total_users,
-                totalProducts: productsResult[0].total_products,
-                recentOrders: recentOrdersResult[0].recent_orders,
-                monthlyRevenue: monthlyRevenue
-            }
+            data: stats
         });
     } catch (error) {
         console.error('ERROR Fetching Dashboard Stats:', error);
-        res.status(500).json({ Error: 'Error Fetching Dashboard Stats' });
+        console.error('Error details:', error.message);
+        res.status(500).json({ 
+            Error: 'Error Fetching Dashboard Stats',
+            message: error.message 
+        });
     }
 }
 
@@ -68,19 +91,27 @@ async function getAllUsersAdmin(req, res) {
             ORDER BY u.createdAt DESC
             LIMIT ? OFFSET ?`, [...queryParams, parseInt(limit), parseInt(offset)]);
 
-        const [countResult] = await pool.query(`
-            SELECT COUNT(*) as total 
-            FROM users u
-            LEFT JOIN roles r ON u.roles_id = r.roles_id
-            ${whereClause}`, queryParams);
-
+        let totalUsers = users.length;
+        let totalPages = 1;
+        let countResult;
+        try {
+            [countResult] = await pool.query(`
+                SELECT COUNT(*) as total 
+                FROM users u
+                LEFT JOIN roles r ON u.roles_id = r.roles_id
+                ${whereClause}`, queryParams);
+            totalUsers = countResult[0].total;
+            totalPages = Math.ceil(totalUsers / limit);
+        } catch (err) {
+            console.error('Error fetching user count:', err);
+        }
         res.status(200).json({
             data: {
                 users,
                 pagination: {
                     currentPage: parseInt(page),
-                    totalPages: Math.ceil(countResult[0].total / limit),
-                    totalUsers: countResult[0].total
+                    totalPages,
+                    totalUsers
                 }
             }
         });

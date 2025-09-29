@@ -121,9 +121,9 @@ export const promotionAPI = {
 
 // ==================== ADMIN ====================
 export const adminAPI = {
-    getDashboardStats: () => api.get('/admin/dashboard'),
+    getDashboardStats: () => api.get('/admin/dashboard/stats'),
     getAllUsers: () => api.get('/admin/users'),
-    getAllOrders: () => api.get('/admin/orders'),
+    getAllOrders: () => api.get('/orders'), // Admin access through orders endpoint with auth
     getAllProducts: () => api.get('/admin/products'),
     getAllReviews: () => api.get('/admin/reviews'),
     getReports: (type, dateRange) => api.get(`/admin/reports/${type}?start=${dateRange.start}&end=${dateRange.end}`)
@@ -182,3 +182,4 @@ export default {
     admin: adminAPI,
     utils: apiUtils
 };
+

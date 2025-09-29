@@ -63,7 +63,7 @@ export default function AddressManagement() {
             setLoading(true);
 
             if (editingAddress) {
-                await updateShippingAddress(editingAddress.user_address_id, formData);
+                await updateShippingAddress(editingAddress.address_id, formData);
                 setMessage({ type: 'success', text: 'Address updated successfully!' });
             } else {
                 await addShippingAddress(formData);
@@ -345,7 +345,7 @@ export default function AddressManagement() {
                                 <div className="flex gap-2 ml-4">
                                     {!address.is_default && (
                                         <button
-                                            onClick={() => handleSetDefault(address.user_address_id)}
+                                            onClick={() => handleSetDefault(address.address_id)}
                                             disabled={loading}
                                             className="text-amber-600 hover:text-amber-700 text-sm font-medium disabled:opacity-50"
                                         >
@@ -360,7 +360,7 @@ export default function AddressManagement() {
                                         Edit
                                     </button>
                                     <button
-                                        onClick={() => handleDelete(address.user_address_id)}
+                                        onClick={() => handleDelete(address.address_id)}
                                         disabled={loading}
                                         className="text-red-600 hover:text-red-700 text-sm font-medium disabled:opacity-50"
                                     >
