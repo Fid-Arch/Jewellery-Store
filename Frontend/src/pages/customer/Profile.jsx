@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useStore } from "../../context/StoreContext"; // ✅ Import context hook
+import UserReviews from "../../components/UserReviews";
 
 const dummyOrders = [
   {
@@ -105,6 +106,11 @@ export default function Profile() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* My Reviews */}
+      <div className="mb-10">
+        <UserReviews user={user} />
       </div>
 
       {/* Wishlist Summary - Dynamic from context */}

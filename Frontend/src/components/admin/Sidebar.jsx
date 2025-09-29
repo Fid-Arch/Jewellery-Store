@@ -7,6 +7,7 @@ import {
   Users,
   BarChart2,
   Settings,
+  Tag,
 } from "lucide-react";
 
 const linkClass = ({ isActive }) =>
@@ -38,6 +39,9 @@ function Sidebar() {
         </NavLink>
         <NavLink to="/admin/users" className={linkClass}>
           <Users size={20} /> Users
+        </NavLink>
+        <NavLink to="/admin/promotions" className={linkClass}>
+          <Tag size={20} /> Promotions
         </NavLink>
         <NavLink to="/admin/reports" className={linkClass}>
           <BarChart2 size={20} /> Reports
