@@ -362,3 +362,4 @@ localStorage.setItem('debug', 'api');
 ```
 
 This will log all API requests and responses to the console.
+
