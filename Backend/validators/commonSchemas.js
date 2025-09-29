@@ -149,7 +149,7 @@ const promotionSchemas = {
             .optional()
             .allow('', null),
         
-        promotion_code: Joi.string()
+        promotionCode: Joi.string()
             .min(3)
             .max(50)
             .uppercase()
@@ -159,48 +159,129 @@ const promotionSchemas = {
                 'string.pattern.base': 'Promotion code can only contain uppercase letters and numbers'
             }),
         
-        discount_rate: Joi.number()
+        discountRate: Joi.number()
             .positive()
             .max(100)
             .precision(2)
             .required(),
         
-        discount_type: Joi.string()
+        discountType: Joi.string()
             .valid('percentage', 'fixed_amount')
             .required(),
         
-        minimum_order_value: customValidators.price.optional(),
+        minimumOrderValue: customValidators.price.optional(),
         
-        usage_limit: Joi.number()
+        usageLimit: Joi.number()
             .integer()
             .positive()
-            .optional(),
+            .optional()
+            .allow(null),
         
-        start_date: Joi.date()
-            .min('now')
+        startDate: Joi.date()
             .required(),
         
-        end_date: Joi.date()
-            .greater(Joi.ref('start_date'))
+        endDate: Joi.date()
+            .greater(Joi.ref('startDate'))
             .required(),
         
-        applicable_categories: Joi.array()
+        applicableCategories: Joi.array()
             .items(Joi.number().integer().positive())
-            .optional(),
+            .optional()
+            .allow(null),
         
-        is_active: Joi.boolean().default(true)
+        isActive: Joi.boolean().default(true)
+    }),
+
+    // Validate Promotion Code
+    validatePromotion: Joi.object({
+        promotionCode: Joi.string()
+            .min(3)
+            .max(50)
+            .required(),
+        
+        userId: Joi.number()
+            .integer()
+            .positive()
+            .required(),
+        
+        cartTotal: customValidators.price.required(),
+        
+        cartItems: Joi.array()
+            .items(Joi.object({
+                product_id: Joi.number().integer().positive().required(),
+                category_id: Joi.number().integer().positive().required(),
+                price: customValidators.price.required(),
+                quantity: Joi.number().integer().positive().required()
+            }))
+            .optional()
     }),
 
     // Apply Promotion
     applyPromotion: Joi.object({
-        promotion_code: Joi.string()
+        promotionCode: Joi.string()
+            .min(3)
+            .max(50)
+            .required(),
+        
+        orderId: Joi.number()
+            .integer()
+            .positive()
+            .required()
+    }),
+
+    // Update Promotion (Admin)
+    updatePromotion: Joi.object({
+        name: Joi.string()
+            .min(2)
+            .max(100)
+            .optional(),
+        
+        description: Joi.string()
+            .max(500)
+            .optional()
+            .allow('', null),
+        
+        promotionCode: Joi.string()
             .min(3)
             .max(50)
             .uppercase()
-            .required(),
+            .pattern(/^[A-Z0-9]+$/)
+            .optional()
+            .messages({
+                'string.pattern.base': 'Promotion code can only contain uppercase letters and numbers'
+            }),
         
-        order_total: customValidators.price.required()
-    })
+        discountRate: Joi.number()
+            .positive()
+            .max(100)
+            .precision(2)
+            .optional(),
+        
+        discountType: Joi.string()
+            .valid('percentage', 'fixed_amount')
+            .optional(),
+        
+        minimumOrderValue: customValidators.price.optional(),
+        
+        usageLimit: Joi.number()
+            .integer()
+            .positive()
+            .optional()
+            .allow(null),
+        
+        startDate: Joi.date()
+            .optional(),
+        
+        endDate: Joi.date()
+            .optional(),
+        
+        applicableCategories: Joi.array()
+            .items(Joi.number().integer().positive())
+            .optional()
+            .allow(null),
+        
+        isActive: Joi.boolean().optional()
+    }).min(1)
 };
 
 // Notification Schemas

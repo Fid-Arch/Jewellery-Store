@@ -1,5 +1,41 @@
 const pool = require('../config/database');
 
+// Get all promotions (Admin only)
+async function getAllPromotions(req, res) {
+  try {
+    const [promotions] = await pool.query(`
+      SELECT * FROM promotion 
+      ORDER BY promotion_id DESC
+    `);
+    
+    // Transform snake_case to camelCase for frontend
+    const transformedPromotions = promotions.map(promo => ({
+      id: promo.promotion_id,
+      promotionId: promo.promotion_id,
+      name: promo.name,
+      description: promo.description,
+      discountRate: promo.discount_rate,
+      startDate: promo.start_date,
+      endDate: promo.end_date,
+      promotionCode: promo.promotion_code,
+      discountType: promo.discount_type,
+      minimumOrderValue: promo.minimum_order_value,
+      usageLimit: promo.usage_limit,
+      usageCount: promo.usage_count,
+      isActive: promo.is_active,
+      applicableCategories: promo.applicable_categories
+    }));
+    
+    res.status(200).json({
+      Message: 'All promotions retrieved successfully',
+      promotions: transformedPromotions
+    });
+  } catch (error) {
+    console.error("ERROR Fetching All Promotions:", error);
+    res.status(500).json({ Message: 'Error fetching promotions' });
+  }
+}
+
 // Get active promotions
 async function getActivePromotions(req, res) {
   try {
@@ -64,6 +100,12 @@ async function createPromotion(req, res) {
 async function updatePromotion(req, res) {
   try {
     const promotionId = req.params.id;
+    console.log('=== UPDATE PROMOTION REQUEST ===');
+    console.log('Promotion ID:', promotionId);
+    console.log('Request Body:', JSON.stringify(req.body, null, 2));
+    console.log('Content-Type:', req.headers['content-type']);
+    console.log('================================');
+    
     const {
       name, description, discountRate, discountType, promotionCode,
       startDate, endDate, minimumOrderValue, usageLimit, applicableCategories, isActive
@@ -169,6 +211,10 @@ async function deletePromotion(req, res) {
 // Validate promotion code
 async function validatePromotionCode(req, res) {
   try {
+    console.log('=== VALIDATE PROMOTION REQUEST ===');
+    console.log('Request Body:', JSON.stringify(req.body, null, 2));
+    console.log('==================================');
+    
     const { promotionCode, userId, cartTotal, cartItems } = req.body;
     
     if (!promotionCode || !userId || !cartTotal) {
@@ -249,12 +295,20 @@ async function getPromotionStats(req, res) {
 
 async function checkPromotionValidity(promotionCode, userId, cartTotal, cartItems = []) {
   try {
+    console.log('=== CHECKING PROMOTION VALIDITY ===');
+    console.log('Promotion Code:', promotionCode);
+    console.log('User ID:', userId);
+    console.log('Cart Total:', cartTotal);
+    console.log('Cart Items:', cartItems);
+    
     // Get promotion details
     const [promotions] = await pool.query(
       `SELECT * FROM promotion 
        WHERE promotion_code = ? AND is_active = TRUE`,
       [promotionCode]
     );
+    
+    console.log('Found promotions:', promotions.length);
     
     if (promotions.length === 0) {
       return { valid: false, Message: 'Invalid promotion code' };
@@ -328,13 +382,19 @@ async function checkPromotionValidity(promotionCode, userId, cartTotal, cartItem
     // Ensure discount doesn't exceed cart total
     discountAmount = Math.min(discountAmount, cartTotal);
     
-    return {
+    const result = {
       valid: true,
       promotion: promotion,
       discountAmount: parseFloat(discountAmount.toFixed(2)),
       finalTotal: parseFloat((cartTotal - discountAmount).toFixed(2)),
       Message: 'Promotion applied successfully'
     };
+    
+    console.log('=== PROMOTION VALIDATION RESULT ===');
+    console.log('Result:', result);
+    console.log('==================================');
+    
+    return result;
     
   } catch (error) {
     console.error("ERROR Validating Promotion Code:", error);
@@ -391,6 +451,7 @@ async function processPromotionApplication(promotionCode, userId, orderId) {
 }
 
 module.exports = {
+  getAllPromotions,
   getActivePromotions,
   createPromotion,
   updatePromotion,

@@ -22,7 +22,7 @@ const getStripe = () => {
 };
 
 export default function Checkout() {
-  const { user, cart, clearCart } = useStore();
+  const { user, cart, clearCart, appliedPromotion } = useStore();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -189,7 +189,10 @@ export default function Checkout() {
   };
 
   const calculateTotal = () => {
-    return calculateSubtotal() + calculateShippingCost();
+    const subtotal = calculateSubtotal();
+    const shipping = calculateShippingCost();
+    const promotionDiscount = appliedPromotion ? appliedPromotion.discount : 0;
+    return Math.max(0, subtotal + shipping - promotionDiscount);
   };
 
   const handlePlaceOrder = async () => {
@@ -225,7 +228,9 @@ export default function Checkout() {
           shipping_address_id: selectedAddress.address_id,
           shipping_method: selectedShippingMethod.id,
           shipping_cost: calculateShippingCost(),
-          subtotal: calculateSubtotal()
+          subtotal: calculateSubtotal(),
+          promotion_code: appliedPromotion?.code || null,
+          promotion_discount: appliedPromotion?.discount || 0
         })
       });
 
@@ -245,6 +250,8 @@ export default function Checkout() {
         total_amount: calculateTotal(),
         payment_method: 'stripe',
         payment_intent_id: paymentIntentResult.payment_intent_id,
+        promotion_code: appliedPromotion?.code || null,
+        promotion_discount: appliedPromotion?.discount || 0,
         stripe_payment_method_id: paymentMethod.id
       };
 
@@ -702,6 +709,13 @@ export default function Checkout() {
                 <span>Subtotal:</span>
                 <span>${calculateSubtotal().toFixed(2)}</span>
               </div>
+              
+              {appliedPromotion && (
+                <div className="flex justify-between items-center mb-2 text-green-600">
+                  <span>Promotion ({appliedPromotion.code}):</span>
+                  <span>-${appliedPromotion.discount.toFixed(2)}</span>
+                </div>
+              )}
               
               {selectedShippingMethod && (
                 <div className="flex justify-between items-center mb-2">

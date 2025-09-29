@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { useStore } from "../../context/StoreContext";
 import { Link } from "react-router-dom";
+import PromotionCodeInput from "../../components/PromotionCodeInput";
 
 export default function Cart() {
-  const { cart, removeFromCart, updateQty, user, isLoading } = useStore();
+  const { 
+    cart, 
+    removeFromCart, 
+    updateQty, 
+    user, 
+    isLoading, 
+    appliedPromotion, 
+    setAppliedPromotion 
+  } = useStore();
   const [cartData, setCartData] = useState({ items: [], total_amount: 0 });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -81,6 +90,14 @@ export default function Cart() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePromotionApplied = (promotionData) => {
+    setAppliedPromotion(promotionData);
+  };
+
+  const handlePromotionRemoved = () => {
+    setAppliedPromotion(null);
   };
 
   const handleRemoveItem = async (item) => {
@@ -267,10 +284,53 @@ export default function Cart() {
               ))}
             </tbody>
           </table>
+
+          {/* Promotion Code Section */}
+          <PromotionCodeInput
+            user={user}
+            cartTotal={cartData.total_amount}
+            cartItems={cartData.items.map(item => ({
+              product_id: item.product_id || item.id,
+              category_id: item.category_id || 1,
+              price: item.price || item.min_price,
+              quantity: item.qty || item.quantity || 1
+            }))}
+            onPromotionApplied={handlePromotionApplied}
+            onPromotionRemoved={handlePromotionRemoved}
+            appliedPromotion={appliedPromotion}
+          />
+
+          {/* Cart Summary */}
+          <div className="bg-gray-50 p-4 rounded-lg mb-6">
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Subtotal:</span>
+                <span>${cartData.total_amount && !isNaN(cartData.total_amount) ? Number(cartData.total_amount).toFixed(2) : '0.00'}</span>
+              </div>
+              
+              {appliedPromotion && (
+                <div className="flex justify-between text-green-600">
+                  <span>Promotion Discount:</span>
+                  <span>-${appliedPromotion.discount.toFixed(2)}</span>
+                </div>
+              )}
+              
+              <div className="border-t border-gray-300 pt-2">
+                <div className="flex justify-between text-xl font-semibold text-gray-800">
+                  <span>Total:</span>
+                  <span>
+                    ${appliedPromotion 
+                      ? appliedPromotion.finalTotal.toFixed(2) 
+                      : (cartData.total_amount && !isNaN(cartData.total_amount) ? Number(cartData.total_amount).toFixed(2) : '0.00')
+                    }
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="flex justify-between items-center">
-            <p className="text-xl font-semibold text-gray-800">
-              Subtotal: ${cartData.total_amount && !isNaN(cartData.total_amount) ? Number(cartData.total_amount).toFixed(2) : '0.00'}
-            </p>
+            <div></div>
             {user?.token ? (
               <Link
                 to="/checkout"

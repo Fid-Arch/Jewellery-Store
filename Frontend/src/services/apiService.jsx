@@ -110,10 +110,12 @@ export const promotionAPI = {
     getAllPromotions: () => api.get('/promotions'),
     getPromotionById: (promotionId) => api.get(`/promotions/${promotionId}`),
     getActivePromotions: () => api.get('/promotions/active'),
+    validatePromotion: (data) => api.post('/promotions/validate', data),
+    applyPromotion: (data) => api.post('/promotions/apply', data),
     
     // Admin functions
     createPromotion: (data) => api.post('/promotions', data),
-    updatePromotion: (promotionId, data) => api.patch(`/promotions/${promotionId}`, data),
+    updatePromotion: (promotionId, data) => api.put(`/promotions/${promotionId}`, data),
     deletePromotion: (promotionId) => api.delete(`/promotions/${promotionId}`)
 };
 

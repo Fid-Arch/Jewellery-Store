@@ -36,6 +36,7 @@ import AdminDashboard from "./pages/admin/Dashboard";
 import Products from "./pages/admin/Products";
 import Orders from "./pages/admin/Orders";
 import Users from "./pages/admin/Users";
+import Promotions from "./pages/admin/Promotions";
 import Reports from "./pages/admin/Reports";
 import Settings from "./pages/admin/Settings";
 
@@ -144,6 +145,10 @@ function App() {
         <Route
           path="/admin/users"
           element={user?.role.toLowerCase() === "admin" ? <Users /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/admin/promotions"
+          element={user?.role.toLowerCase() === "admin" ? <Promotions /> : <Navigate to="/" />}
         />
         <Route
           path="/admin/reports"

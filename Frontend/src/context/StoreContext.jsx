@@ -10,6 +10,7 @@ export const StoreProvider = ({ children }) => {
   const [wishlist, setWishlist] = useState([]);
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true); // ✅ New: Track hydration
+  const [appliedPromotion, setAppliedPromotion] = useState(null);
 
   // ✅ Load from localStorage on mount (with loading)
   useEffect(() => {
@@ -475,6 +476,8 @@ export const StoreProvider = ({ children }) => {
         removeFromWishlist,
         login,
         logout,
+        appliedPromotion,
+        setAppliedPromotion,
         cartCount: cart === null 
           ? 0 // Return 0 if cart not hydrated yet
           : Array.isArray(cart) 

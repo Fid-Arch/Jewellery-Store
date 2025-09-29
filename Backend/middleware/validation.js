@@ -12,6 +12,12 @@ const validateRequest = (schema, property = 'body') => {
         });
 
         if (error) {
+            console.log('=== VALIDATION ERROR ===');
+            console.log('Schema:', schema._type || 'Unknown');
+            console.log('Received data:', JSON.stringify(req[property], null, 2));
+            console.log('Validation errors:', error.details);
+            console.log('========================');
+
             const errorMessages = error.details.map(detail => ({
                 field: detail.path.join('.'),
                 message: detail.message,
