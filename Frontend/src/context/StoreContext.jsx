@@ -15,7 +15,6 @@ export const StoreProvider = ({ children }) => {
   // ✅ Load from localStorage on mount (with loading)
   useEffect(() => {
     const loadInitialState = () => {
-      console.log("Hydrating from localStorage...");
       try {
         // Load user
         const savedUser = localStorage.getItem("user");
@@ -23,7 +22,6 @@ export const StoreProvider = ({ children }) => {
         if (savedUser) {
           parsedUser = JSON.parse(savedUser);
           setUser(parsedUser);
-          console.log("User hydrated:", parsedUser);
         }
 
         // Load cart based on user login status
