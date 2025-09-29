@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStore } from "../../context/StoreContext";
 import { updateUserProfile, getUserProfile } from "../../utils/api";
-import { getUserShippingAddresses, addShippingAddress, updateShippingAddress } from "../../utils/AddressAPI";
+import { getUserShippingAddresses, addShippingAddress, updateShippingAddress, setDefaultShippingAddress } from "../../utils/addressAPI";
 import UserReviews from "../../components/UserReviews";
 
 const dummyOrders = [
@@ -242,8 +242,6 @@ export default function Profile() {
 
       // Update context with primary address
       login({ ...user, address: newSelected });
-
-      setIsEditingAddress(false);
     } catch (err) {
       console.error("Address save error:", err);
       setAddressMessage({ type: 'error', text: err.message || 'Failed to save address' });
@@ -267,19 +265,60 @@ export default function Profile() {
     if (!selectedAddress) setIsEditingAddress(false); // Only close edit if no selection
   };
 
-  // ✅ Select Address for Edit (pre-fill form)
+  // ✅ Select Address for Edit (pre-fill form) - Now called from Edit button
+  const handleSelectAddressForEdit = (addr) => {
+    setSelectedAddress(addr);
+    // Pre-fill for edit
+    setAddressForm({
+      address_line1: addr.address_line1 || '',
+      address_line2: addr.address_line2 || '',
+      postcode: addr.postcode || '',
+      states: addr.states || '', // ✅ Plural
+      country: addr.country || 'Australia',
+      is_default: addr.is_default || false
+    });
+    setShowAddAddressForm(true); // Open form
+  };
+
+  // ✅ Select Address (for radio/primary selection only, without opening form)
   const handleSelectAddress = (addr) => {
     setSelectedAddress(addr);
-    if (isEditingAddress && showAddAddressForm) {
-      // Pre-fill for edit
-      setAddressForm({
-        address_line1: addr.address_line1 || '',
-        address_line2: addr.address_line2 || '',
-        postcode: addr.postcode || '',
-        states: addr.states || '', // ✅ Plural
-        country: addr.country || 'Australia',
-        is_default: addr.is_default || false
-      });
+  };
+
+  // ✅ Done Button: Set selected as default and close edit mode
+  const handleDone = async () => {
+    if (!selectedAddress) {
+      setAddressMessage({ type: 'error', text: 'Please select an address to set as default.' });
+      return;
+    }
+
+    setUpdating(true);
+    setAddressMessage({ type: '', text: '' });
+
+    try {
+      // Set selected as default via API
+      await setDefaultShippingAddress(selectedAddress.address_id);
+      setAddressMessage({ type: 'success', text: `Set ${selectedAddress.address_line1} as default address!` });
+
+      // Refresh list to reflect changes
+      const addressesData = await getUserShippingAddresses();
+      const updatedAddresses = addressesData.data?.addresses || [];
+      setShippingAddresses(updatedAddresses);
+
+      // Update selected to ensure it's now default
+      const updatedSelected = updatedAddresses.find(addr => addr.address_id === selectedAddress.address_id);
+      setSelectedAddress(updatedSelected);
+
+      // Update context
+      login({ ...user, address: updatedSelected });
+
+      // Close edit mode
+      setIsEditingAddress(false);
+    } catch (err) {
+      console.error("Set default error:", err);
+      setAddressMessage({ type: 'error', text: err.message || 'Failed to set default address' });
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -449,20 +488,19 @@ export default function Profile() {
             {/* Existing Addresses List (like Checkout) */}
             {shippingAddresses.length > 0 && (
               <div>
-                <h3 className="text-lg font-medium mb-3">Select Primary Address</h3>
+                <h3 className="text-lg font-medium mb-3">Your Addresses</h3>
                 <div className="space-y-3 max-h-48 overflow-y-auto">
                   {shippingAddresses.map((address) => (
                     <div
                       key={address.address_id}
-                      className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                      className={`border rounded-lg p-4 transition-all ${
                         selectedAddress?.address_id === address.address_id
                           ? 'border-yellow-600 bg-yellow-50'
                           : 'border-gray-200 hover:border-yellow-400'
                       }`}
-                      onClick={() => handleSelectAddress(address)}
                     >
                       <div className="flex items-start justify-between">
-                        <div>
+                        <div className="flex-1">
                           {address.is_default && (
                             <span className="inline-block bg-yellow-600 text-white text-xs px-2 py-1 rounded-full mb-2">
                               Default
@@ -474,12 +512,21 @@ export default function Profile() {
                             {address.states} {address.postcode}, {address.country}
                           </p>
                         </div>
-                        <input
-                          type="radio"
-                          checked={selectedAddress?.address_id === address.address_id}
-                          onChange={() => handleSelectAddress(address)}
-                          className="mt-1"
-                        />
+                        <div className="flex items-center space-x-2 ml-4">
+                          <input
+                            type="radio"
+                            checked={selectedAddress?.address_id === address.address_id}
+                            onChange={() => handleSelectAddress(address)}
+                            className="mt-1"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSelectAddressForEdit(address)}
+                            className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                          >
+                            Edit
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -487,22 +534,13 @@ export default function Profile() {
               </div>
             )}
 
-            {/* Add/Edit Form Toggle (like Checkout) */}
+            {/* Add New Address Toggle */}
             <div>
               <button
                 onClick={() => {
+                  setSelectedAddress(null); // Clear for add
                   setShowAddAddressForm(!showAddAddressForm);
-                  if (!showAddAddressForm && selectedAddress) {
-                    // Pre-fill for edit on open
-                    setAddressForm({
-                      address_line1: selectedAddress.address_line1 || '',
-                      address_line2: selectedAddress.address_line2 || '',
-                      postcode: selectedAddress.postcode || '',
-                      states: selectedAddress.states || '',
-                      country: selectedAddress.country || 'Australia',
-                      is_default: selectedAddress.is_default || false
-                    });
-                  } else if (showAddAddressForm) {
+                  if (showAddAddressForm) {
                     // Reset for add
                     setAddressForm({
                       address_line1: '',
@@ -516,7 +554,7 @@ export default function Profile() {
                 }}
                 className="flex items-center text-yellow-600 hover:text-yellow-700 font-medium mb-3"
               >
-                {showAddAddressForm ? 'Cancel Edit' : (selectedAddress ? 'Edit Selected' : 'Add New Address')}
+                {showAddAddressForm ? 'Cancel Add' : 'Add New Address'}
               </button>
 
               {showAddAddressForm && (
@@ -613,13 +651,13 @@ export default function Profile() {
               )}
             </div>
 
-            {/* Done Button */}
+            {/* Done Button: Set Default and Close */}
             <button
-              onClick={() => setIsEditingAddress(false)}
-              disabled={updating || showAddAddressForm}
-              className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 disabled:opacity-50"
+              onClick={handleDone}
+              disabled={updating || !selectedAddress || showAddAddressForm}
+              className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 disabled:opacity-50"
             >
-              Done
+              {updating ? 'Updating...' : 'Done - Set Selected as Default'}
             </button>
           </div>
         ) : (
