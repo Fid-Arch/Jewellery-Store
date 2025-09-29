@@ -2,13 +2,15 @@ version: latest
 services:
   # Backend API Services
   backend:
-    build: .
+    build:
+      context: ./Backend
+      dockerfile: dockerfile
     container_name: goldmarks-backend
     command: npm run dev
     ports:
       - "3000:3000"
     volumes:
-      - .:/usr/src/app
+      - ./Backend:/usr/src/app
       - /usr/src/app/node_modules # container node modules
     depends_on:
       db:

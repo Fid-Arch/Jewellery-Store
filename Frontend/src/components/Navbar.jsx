@@ -1,12 +1,28 @@
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { ShoppingCart, User, Heart, LogOut } from "lucide-react";
+import { ShoppingCart, User, Heart, LogOut, MapPin, UserCog } from "lucide-react";
 import { useStore } from "../context/StoreContext";
 import LuxuryButton from "./LuxuryButton";
 
 function Navbar() {
   const { cartCount, wishlistCount, user, logout } = useStore();
   const navigate = useNavigate();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef(null);
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setShowUserMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const linkCls = ({ isActive }) =>
     "relative group hover:text-gold-400 transition " +
@@ -84,16 +100,80 @@ function Navbar() {
           </NavLink>
 
           {user ? (
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-700">
-                {user.role.toUpperCase()}
-              </span>
+            <div className="relative group" ref={userMenuRef}>
               <button
-                onClick={handleLogout}
-                className="flex items-center text-red-500 hover:text-red-700"
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center space-x-2 hover:text-gold-400 focus:outline-none"
               >
-                <LogOut className="h-6 w-6 mr-1" /> Logout
+                <User className="h-6 w-6" />
+                <span className="text-sm text-gray-700">
+                  {user.first_name || user.role.toUpperCase()}
+                </span>
               </button>
+              
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                  <div className="py-1">
+                    <div className="px-4 py-2 text-sm text-gray-500 border-b">
+                      {user.role.toUpperCase()} Account
+                    </div>
+                    
+                    {user.role === 'customer' && (
+                      <>
+                        <NavLink
+                          to="/profile"
+                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gold-50 hover:text-gold-700"
+                          onClick={() => setShowUserMenu(false)}
+                        >
+                          <UserCog className="h-4 w-4 mr-2" />
+                          Profile
+                        </NavLink>
+                        <NavLink
+                          to="/addresses"
+                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gold-50 hover:text-gold-700"
+                          onClick={() => setShowUserMenu(false)}
+                        >
+                          <MapPin className="h-4 w-4 mr-2" />
+                          Address Book
+                        </NavLink>
+                      </>
+                    )}
+                    
+                    {user.role === 'admin' && (
+                      <NavLink
+                        to="/admin"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gold-50 hover:text-gold-700"
+                        onClick={() => setShowUserMenu(false)}
+                      >
+                        <UserCog className="h-4 w-4 mr-2" />
+                        Admin Dashboard
+                      </NavLink>
+                    )}
+                    
+                    {user.role === 'staff' && (
+                      <NavLink
+                        to="/staff"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gold-50 hover:text-gold-700"
+                        onClick={() => setShowUserMenu(false)}
+                      >
+                        <UserCog className="h-4 w-4 mr-2" />
+                        Staff Dashboard
+                      </NavLink>
+                    )}
+                    
+                    <button
+                      onClick={() => {
+                        handleLogout();
+                        setShowUserMenu(false);
+                      }}
+                      className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 border-t"
+                    >
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <NavLink

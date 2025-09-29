@@ -20,6 +20,7 @@ import Checkout from "./pages/customer/Checkout";
 import Wishlist from "./pages/customer/Wishlist";
 import Profile from "./pages/customer/Profile";
 import OrderTracking from "./pages/customer/OrderTracking";
+import AddressManagement from "./pages/customer/AddressManagement";
 import Jewellery from "./pages/Jewellery";
 import HighJewellery from "./pages/HighJewellery";
 import FineJewellery from "./pages/FineJewellery";
@@ -27,12 +28,15 @@ import LuxuryCollections from "./pages/LuxuryCollections";
 import Accessories from "./pages/Accessories";
 import Gifts from "./pages/Gifts";
 import ProductDetail from "./pages/ProductDetail";
+import ProductSearch from "./pages/ProductSearch";
+import ProductAPITest from "./pages/ProductAPITest";
 
 // Admin pages
 import AdminDashboard from "./pages/admin/Dashboard";
 import Products from "./pages/admin/Products";
 import Orders from "./pages/admin/Orders";
 import Users from "./pages/admin/Users";
+import Promotions from "./pages/admin/Promotions";
 import Reports from "./pages/admin/Reports";
 import Settings from "./pages/admin/Settings";
 
@@ -88,17 +92,20 @@ function App() {
           element={user ? <Navigate to="/" /> : <AdminRegister />}
         />
 
-        {/* Customer routes */}
-        <Route path="/cart" element={
-          user?.role.toLowerCase() === "customer" ? <Cart /> : <Navigate to="/" />} />
+        {/* Customer routes - Cart accessible to guests and customers */}
+        <Route path="/cart" element={<Cart />} />
+        
+        {/* Customer-only routes (require login) */}
         <Route path="/checkout" element={
-          user?.role.toLowerCase() === "customer" ? <Checkout /> : <Navigate to="/" />} />
+          user?.role.toLowerCase() === "customer" ? <Checkout /> : <Navigate to="/login" />} />
         <Route path="/wishlist" element={
-          user?.role.toLowerCase() === "customer" ? <Wishlist /> : <Navigate to="/" />} />
+          user?.role.toLowerCase() === "customer" ? <Wishlist /> : <Navigate to="/login" />} />
         <Route path="/profile" element={
-          user?.role.toLowerCase() === "customer" ? <Profile /> : <Navigate to="/" />} />
+          user?.role.toLowerCase() === "customer" ? <Profile /> : <Navigate to="/login" />} />
         <Route path="/orders" element={
-          user?.role.toLowerCase() === "customer" ? <OrderTracking /> : <Navigate to="/" />} />
+          user?.role.toLowerCase() === "customer" ? <OrderTracking /> : <Navigate to="/login" />} />
+        <Route path="/addresses" element={
+          user?.role.toLowerCase() === "customer" ? <AddressManagement /> : <Navigate to="/login" />} />
 
         {/* Product routes */}
         <Route path="/jewellery" element={<Jewellery />} />
@@ -107,6 +114,8 @@ function App() {
         <Route path="/luxury-collections" element={<LuxuryCollections />} />
         <Route path="/accessories" element={<Accessories />} />
         <Route path="/gifts" element={<Gifts />} />
+        <Route path="/search" element={<ProductSearch />} />
+        <Route path="/test-products" element={<ProductAPITest />} />
         <Route path="/product/:id" element={<ProductDetail />} />
 
         {/* Luxury Exclusive Page */}
@@ -136,6 +145,10 @@ function App() {
         <Route
           path="/admin/users"
           element={user?.role.toLowerCase() === "admin" ? <Users /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/admin/promotions"
+          element={user?.role.toLowerCase() === "admin" ? <Promotions /> : <Navigate to="/" />}
         />
         <Route
           path="/admin/reports"

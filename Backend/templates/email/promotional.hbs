@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{promotionTitle}} - Goldmarks Jewellery</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #d4af37; margin: 0;">Goldmarks Jewellery</h1>
+        <p style="margin: 5px 0 0 0; color: #666;">Exclusive Offer</p>
+    </div>
+    
+    <div style="background: linear-gradient(135deg, #d4af37, #f4e9c8); padding: 30px; border-radius: 12px; text-align: center; margin-bottom: 30px;">
+        <h2 style="color: white; margin: 0 0 10px 0; font-size: 28px; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">{{promotionTitle}}</h2>
+        {{#if discount}}
+        <div style="background: rgba(255,255,255,0.9); padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <span style="font-size: 36px; font-weight: bold; color: #d4af37;">{{discount}}% OFF</span>
+        </div>
+        {{/if}}
+        {{#if promoCode}}
+        <p style="color: white; font-size: 18px; margin: 15px 0;">Use code: <strong style="background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 4px;">{{promoCode}}</strong></p>
+        {{/if}}
+        {{#if validUntil}}
+        <p style="color: white; font-size: 14px; margin: 0;">Valid until {{validUntil}}</p>
+        {{/if}}
+    </div>
+    
+    <div style="background: #f9f9f9; padding: 30px; border-radius: 8px; margin-bottom: 20px;">
+        <h2 style="color: #d4af37; margin-top: 0;">Dear {{firstName}},</h2>
+        {{{content}}}
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+        <a href="{{ctaUrl}}" style="background-color: #d4af37; color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px; display: inline-block; box-shadow: 0 4px 8px rgba(212, 175, 55, 0.3);">{{ctaText}}</a>
+    </div>
+    
+    <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
+        <p style="margin: 0; color: #856404; font-size: 14px;">
+            <strong>Limited Time:</strong> This exclusive offer won't last long. Shop now to secure your favorites!
+        </p>
+    </div>
+    
+    <footer style="text-align: center; color: #666; font-size: 14px; border-top: 1px solid #eee; padding-top: 20px;">
+        <p>Best regards,<br><strong>The Goldmarks Jewellery Team</strong></p>
+        <p style="margin-top: 20px;">
+            <a href="#" style="color: #d4af37; text-decoration: none; margin: 0 10px;">Shop Now</a> |
+            <a href="#" style="color: #d4af37; text-decoration: none; margin: 0 10px;">Unsubscribe</a> |
+            <a href="#" style="color: #d4af37; text-decoration: none; margin: 0 10px;">Manage Preferences</a>
+        </p>
+        <p style="font-size: 12px; color: #999; margin-top: 15px;">
+            You're receiving this email because you opted in to marketing communications from Goldmarks Jewellery.
+        </p>
+    </footer>
+</body>
+</html>

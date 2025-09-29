@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order #{{orderId}} Status Update - Goldmarks Jewellery</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #d4af37; margin: 0;">Goldmarks Jewellery</h1>
+        <p style="margin: 5px 0 0 0; color: #666;">Order Status Update</p>
+    </div>
+    
+    <div style="background: {{statusColor}}; color: white; padding: 25px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+        <h2 style="margin: 0; font-size: 28px;">{{statusTitle}}</h2>
+        <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Order #{{orderId}}</p>
+    </div>
+    
+    <div style="background: #f9f9f9; padding: 30px; border-radius: 8px; margin-bottom: 20px;">
+        {{{content}}}
+    </div>
+    
+    {{#if showTracking}}
+    <div style="background: #e7f3ff; border: 1px solid #b3d9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <h4 style="color: #0056b3; margin-top: 0;">Track Your Package</h4>
+        <p style="margin: 10px 0;"><strong>Tracking Number:</strong> {{trackingNumber}}</p>
+        <div style="text-align: center; margin: 15px 0;">
+            <a href="#" style="background-color: #17a2b8; color: white; padding: 10px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Track Package</a>
+        </div>
+        <p style="margin: 0; font-size: 14px; color: #0056b3;">
+            💡 <em>Tip: Save this tracking number for future reference</em>
+        </p>
+    </div>
+    {{/if}}
+    
+    <div style="background: #fff; border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <h4 style="color: #d4af37; margin-top: 0;">Need Help?</h4>
+        <p style="margin: 10px 0;">Our customer service team is here to assist you:</p>
+        <ul style="margin: 10px 0; padding-left: 20px; color: #666;">
+            <li>📧 Email: <a href="mailto:support@goldmarks.com" style="color: #d4af37;">support@goldmarks.com</a></li>
+            <li>📞 Phone: 1-800-GOLDMARKS</li>
+            <li>💬 Live Chat: Available on our website</li>
+            <li>🕒 Hours: Mon-Fri 9AM-6PM, Sat 10AM-4PM</li>
+        </ul>
+    </div>
+    
+    <footer style="text-align: center; color: #666; font-size: 14px; border-top: 1px solid #eee; padding-top: 20px;">
+        <p>Best regards,<br><strong>The Goldmarks Jewellery Team</strong></p>
+        <p style="margin-top: 20px;">
+            <a href="#" style="color: #d4af37; text-decoration: none; margin: 0 10px;">View Order</a> |
+            <a href="#" style="color: #d4af37; text-decoration: none; margin: 0 10px;">Contact Support</a> |
+            <a href="#" style="color: #d4af37; text-decoration: none; margin: 0 10px;">Shop Again</a>
+        </p>
+    </footer>
+</body>
+</html>
