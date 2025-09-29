@@ -279,6 +279,8 @@ export const StoreProvider = ({ children }) => {
     try {
       if (user?.token) {
         await removeCartItem(productId);
+        // Wait a moment for backend to process, then reload
+        await new Promise(resolve => setTimeout(resolve, 300));
         await loadCartFromBackend();
       } else {
         setCart((prev) => {

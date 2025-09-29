@@ -7,6 +7,7 @@ export default function Cart() {
   const [cartData, setCartData] = useState({ items: [], total_amount: 0 });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [removingItems, setRemovingItems] = useState(new Set());
 
   // Handle different cart data structures (local vs backend)
   useEffect(() => {
@@ -16,8 +17,12 @@ export default function Cart() {
     }
     
     if (user?.token && cart?.items && Array.isArray(cart.items)) {
-      // Backend cart structure with proper data
-      setCartData(cart);
+      // Backend cart structure with proper data - filter out items being removed
+      const filteredCart = {
+        ...cart,
+        items: cart.items.filter(item => !removingItems.has(item.cart_item_id))
+      };
+      setCartData(filteredCart);
     } else if (Array.isArray(cart)) {
       // Array structure (local cart or fallback)
       setCartData({
@@ -33,7 +38,7 @@ export default function Cart() {
       // Empty cart or invalid structure fallback
       setCartData({ items: [], total_amount: 0 });
     }
-  }, [cart, user]);
+  }, [cart, user, removingItems]);
 
   // Clear message after 5 seconds
   useEffect(() => {
@@ -80,6 +85,10 @@ export default function Cart() {
 
   const handleRemoveItem = async (item) => {
     setLoading(true);
+    
+    // Add item to removing set for immediate UI feedback
+    setRemovingItems(prev => new Set(prev).add(item.cart_item_id));
+    
     try {
       // For logged-in users, we MUST have cart_item_id for backend removal
       // For guests, we can use product IDs for local cart removal
@@ -106,7 +115,15 @@ export default function Cart() {
           });
           return;
         }
+        
+        // Call the remove function and let it handle the backend sync
         await removeFromCart(item.cart_item_id);
+        
+        // Success message
+        setMessage({ 
+          type: 'success', 
+          text: 'Item removed successfully.' 
+        });
       } else {
         // Guest cart - use product identifiers for local removal
         const itemId = item.id || item.product_id || item.product_item_id;
@@ -117,12 +134,22 @@ export default function Cart() {
       }
     } catch (error) {
       console.error('Failed to remove item:', error);
+      
+      // If backend removal failed and we had optimistically updated, we should revert
+      // For now, let the next cart refresh handle the sync
+      
       setMessage({ 
         type: 'error', 
-        text: 'Failed to remove item. Please try refreshing the page.' 
+        text: 'Failed to remove item. The item may still appear until you refresh.' 
       });
     } finally {
       setLoading(false);
+      // Remove from removing set after operation completes
+      setRemovingItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(item.cart_item_id);
+        return newSet;
+      });
     }
   };
 

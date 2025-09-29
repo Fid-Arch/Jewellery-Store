@@ -121,7 +121,7 @@ async function getUserShippingAddresses(req, res) {
                 COUNT(so.shop_order_id) as order_count
             FROM user_address ua
             JOIN address a ON ua.address_id = a.address_id
-            LEFT JOIN shop_orders so ON a.address_id = so.shipping_address
+            LEFT JOIN shop_orders so ON a.address_id = so.shipping_address_id
             WHERE ua.user_id = ?
             GROUP BY a.address_id, a.address_line1, a.address_line2, a.postcode, a.states, a.country, ua.is_default
             ORDER BY ua.is_default DESC, order_count DESC

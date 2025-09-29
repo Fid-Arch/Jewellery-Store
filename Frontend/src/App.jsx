@@ -20,6 +20,7 @@ import Checkout from "./pages/customer/Checkout";
 import Wishlist from "./pages/customer/Wishlist";
 import Profile from "./pages/customer/Profile";
 import OrderTracking from "./pages/customer/OrderTracking";
+import AddressManagement from "./pages/customer/AddressManagement";
 import Jewellery from "./pages/Jewellery";
 import HighJewellery from "./pages/HighJewellery";
 import FineJewellery from "./pages/FineJewellery";
@@ -102,6 +103,8 @@ function App() {
           user?.role.toLowerCase() === "customer" ? <Profile /> : <Navigate to="/login" />} />
         <Route path="/orders" element={
           user?.role.toLowerCase() === "customer" ? <OrderTracking /> : <Navigate to="/login" />} />
+        <Route path="/addresses" element={
+          user?.role.toLowerCase() === "customer" ? <AddressManagement /> : <Navigate to="/login" />} />
 
         {/* Product routes */}
         <Route path="/jewellery" element={<Jewellery />} />
