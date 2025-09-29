@@ -22,10 +22,11 @@ async function getUserWishlist() {
         
         const result = await response.json();
         if (!response.ok) {
+            console.error('Wishlist API Error:', response.status, result);
             if (response.status === 401) {
                 throw new Error('Your session has expired. Please log in again.');
             }
-            throw new Error(result.Message || result.message || 'Failed to get wishlist');
+            throw new Error(result.Message || result.message || result.Error || `Failed to get wishlist (${response.status})`);
         }
         return result;
     } catch (error) {
@@ -48,7 +49,7 @@ async function addToWishlist(productId) {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ product_id: productId })
+            body: JSON.stringify({ productId: productId })
         });
         
         const result = await response.json();
@@ -73,7 +74,7 @@ async function removeFromWishlist(productId) {
             throw new Error('Please log in to remove items from wishlist');
         }
 
-        const response = await fetch(`http://localhost:3000/wishlist/remove/${productId}`, {
+        const response = await fetch(`http://localhost:3000/wishlist/item/${productId}`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json',
@@ -155,10 +156,41 @@ async function clearWishlist() {
     }
 }
 
+// Move item from wishlist to cart
+async function moveWishlistToCart(productId) {
+    try {
+        const token = getAuthToken();
+        if (!token) {
+            throw new Error('Please log in to move items to cart');
+        }
+
+        const response = await fetch(`http://localhost:3000/wishlist/move-to-cart/${productId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        const result = await response.json();
+        if (!response.ok) {
+            if (response.status === 401) {
+                throw new Error('Your session has expired. Please log in again.');
+            }
+            throw new Error(result.Message || result.message || 'Failed to move item to cart');
+        }
+        return result;
+    } catch (error) {
+        console.error('Error moving item to cart:', error);
+        throw error;
+    }
+}
+
 export {
     getUserWishlist,
     addToWishlist,
     removeFromWishlist,
     isInWishlist,
-    clearWishlist
+    clearWishlist,
+    moveWishlistToCart
 };

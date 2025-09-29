@@ -116,7 +116,7 @@ async function getUserWishlist(req, res) {
         // Get Wishlist Items
         const [items] = await pool.query(`
             SELECT wi.wishlist_item_id, wi.product_id, p.productname, p.description, 
-                p.product_image, c.name as category_name, wi.created_at,
+                p.product_image, c.name as category_name,
                 MIN(pi.price) as min_price, MAX(pi.price) as max_price,
                 SUM(pi.qty_in_stock) as total_stock, 
                 COUNT(DISTINCT pi.product_item_id) as variants_count,
@@ -129,8 +129,8 @@ async function getUserWishlist(req, res) {
             LEFT JOIN categories c ON p.category_id = c.category_id
             LEFT JOIN product_item pi ON p.product_id = pi.product_id
             WHERE wi.wishlist_id = ? 
-            GROUP BY wi.wishlist_item_id, wi.product_id, p.productname, p.description, p.product_image, c.name, wi.created_at
-            ORDER BY wi.created_at DESC
+            GROUP BY wi.wishlist_item_id, wi.product_id, p.productname, p.description, p.product_image, c.name
+            ORDER BY wi.wishlist_item_id DESC
             LIMIT ? OFFSET ?`, [wishlistId, parseInt(limit), parseInt(offset)]);
 
         const [totalCount] = await pool.query(

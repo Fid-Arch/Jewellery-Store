@@ -2,14 +2,14 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useProducts } from "../context/ProductContext";
 import { useStore } from "../context/StoreContext";
-import { Star, Edit } from "lucide-react";
+import { Star, Edit, Heart } from "lucide-react";
 import ReviewForm from "../components/ReviewForm.jsx";
 import ReviewList from "../components/ReviewList.jsx";
 
 export default function ProductDetail() {
   const { id } = useParams();
   const { getProduct } = useProducts();
-  const { addToCart, addToWishlist, user } = useStore();
+  const { addToCart, addToWishlist, removeFromWishlist, wishlist, user } = useStore();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -111,6 +111,41 @@ export default function ProductDetail() {
     }
   };
 
+  // Local state to track wishlist status for immediate UI feedback
+  const [localIsInWishlist, setLocalIsInWishlist] = useState(false);
+  
+  useEffect(() => {
+    const isInList = wishlist?.some(item => {
+      const itemId = item.product_id || item._id || item.id;
+      const productId = product?.product_id || parseInt(id);
+      return itemId === productId;
+    });
+    setLocalIsInWishlist(isInList);
+  }, [wishlist, product, id]);
+  
+  // Use local state for immediate UI feedback
+  const isInWishlist = localIsInWishlist;
+
+  const handleWishlistToggle = async () => {
+    const productId = product.product_id || parseInt(id);
+    
+    try {
+      if (isInWishlist) {
+        // Immediately update local state for instant feedback
+        setLocalIsInWishlist(false);
+        await removeFromWishlist(productId);
+      } else {
+        // Immediately update local state for instant feedback
+        setLocalIsInWishlist(true);
+        await addToWishlist(product);
+      }
+    } catch (error) {
+      console.error('Wishlist toggle error:', error);
+      // Revert local state on error
+      setLocalIsInWishlist(!isInWishlist);
+    }
+  };
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto px-6 py-10 text-center">
@@ -194,10 +229,16 @@ export default function ProductDetail() {
 
               {/* Save to Wishlist */}
               <button
-                onClick={() => addToWishlist(product)}
-                className="flex-1 px-6 py-2 border-2 border-gold-500 text-gold-600 font-semibold rounded-lg shadow-sm hover:bg-gold-500 hover:text-black transition"
+                onClick={handleWishlistToggle}
+                className={`flex-1 px-6 py-2 border-2 font-semibold rounded-lg shadow-sm transition flex items-center justify-center space-x-2 ${
+                  isInWishlist 
+                    ? 'border-red-500 text-red-600 bg-red-50 hover:bg-red-100' 
+                    : 'border-gold-500 text-gold-600 hover:bg-gold-500 hover:text-black'
+                }`}
+                title={isInWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
               >
-                Save to Wishlist
+                <Heart className={`h-5 w-5 ${isInWishlist ? 'fill-current' : ''}`} />
+                <span>{isInWishlist ? 'Saved to Wishlist' : 'Save to Wishlist'}</span>
               </button>
             </div>
 

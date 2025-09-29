@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { getUserCart, addItemToCart, updateCartItem, removeCartItem, clearUserCart } from "../utils/cartAPI";
+import { getUserWishlist, addToWishlist as addToWishlistAPI, removeFromWishlist as removeFromWishlistAPI } from "../utils/wishlistAPI";
 
 const StoreContext = createContext();
 
@@ -51,7 +52,15 @@ export const StoreProvider = ({ children }) => {
         // Load wishlist (if you have it)
         const savedWishlist = localStorage.getItem("wishlist");
         if (savedWishlist) {
-          setWishlist(JSON.parse(savedWishlist));
+          try {
+            const parsed = JSON.parse(savedWishlist);
+            setWishlist(Array.isArray(parsed) ? parsed : []);
+          } catch (e) {
+            console.error('Error parsing wishlist from localStorage:', e);
+            setWishlist([]);
+          }
+        } else {
+          setWishlist([]);
         }
       } catch (err) {
         console.error("Hydration error:", err);
@@ -299,16 +308,86 @@ export const StoreProvider = ({ children }) => {
   };
 
   // Add to wishlist
-  const addToWishlist = (product) => {
-    setWishlist((prev) => {
-      if (prev.find((item) => item.id === product.id)) return prev;
-      return [...prev, product];
-    });
+  const addToWishlist = async (product) => {
+    const productId = product.product_id || product.id;
+    
+    if (user?.token) {
+      // For logged-in users, use backend API
+      try {
+        // Optimistically add to local state first
+        setWishlist((prev) => {
+          if (prev.find((item) => (item.product_id || item.id) === productId)) {
+            return prev;
+          }
+          return [...prev, { ...product, product_id: productId }];
+        });
+        
+        // Then call the API
+        await addToWishlistAPI(productId);
+        
+        // Finally sync with backend to get the correct data structure
+        await loadUserWishlist();
+      } catch (error) {
+        console.error('Error adding to wishlist:', error);
+        // Remove the optimistic update on error
+        setWishlist((prev) => prev.filter((item) => (item.product_id || item.id) !== productId));
+        throw error;
+      }
+    } else {
+      // For guests, use local storage
+      setWishlist((prev) => {
+        if (prev.find((item) => (item.id || item.product_id) === productId)) {
+          return prev;
+        }
+        const newWishlist = [...prev, product];
+        localStorage.setItem('wishlist', JSON.stringify(newWishlist));
+        return newWishlist;
+      });
+    }
   };
 
   // Remove from wishlist
-  const removeFromWishlist = (id) => {
-    setWishlist((prev) => prev.filter((item) => item.id !== id));
+  const removeFromWishlist = async (id) => {
+    if (user?.token) {
+      // For logged-in users, use backend API
+      try {
+        // Optimistically remove from local state first
+        const originalWishlist = [...wishlist];
+        setWishlist((prev) => prev.filter((item) => (item.product_id || item.id) !== id));
+        
+        // Then call the API
+        await removeFromWishlistAPI(id);
+        
+        // Finally sync with backend
+        await loadUserWishlist();
+      } catch (error) {
+        console.error('Error removing from wishlist:', error);
+        // Restore the original wishlist on error
+        setWishlist(originalWishlist);
+        throw error;
+      }
+    } else {
+      // For guests, use local storage
+      setWishlist((prev) => {
+        const newWishlist = prev.filter((item) => (item.id || item.product_id) !== id);
+        localStorage.setItem('wishlist', JSON.stringify(newWishlist));
+        return newWishlist;
+      });
+    }
+  };
+
+  // Load user wishlist from backend
+  const loadUserWishlist = async () => {
+    if (!user?.token) return;
+    
+    try {
+      const result = await getUserWishlist();
+      const wishlistData = result?.data?.items || [];
+      setWishlist(Array.isArray(wishlistData) ? wishlistData : []);
+    } catch (error) {
+      console.error('Error loading wishlist:', error);
+      setWishlist([]); // Fallback to empty array on error
+    }
   };
 
   // Migrate local cart to backend when user logs in
@@ -332,6 +411,7 @@ export const StoreProvider = ({ children }) => {
   // Login (sets user and saves)
   const login = async (userData) => {
     const localCart = [...cart]; // Save current local cart
+    const localWishlist = [...wishlist]; // Save current local wishlist
     setUser(userData);
     
     // If user has items in local cart, migrate them to backend
@@ -340,6 +420,12 @@ export const StoreProvider = ({ children }) => {
       // Reload cart from backend to include migrated items
       setTimeout(() => loadCartFromBackend(), 500);
     }
+    
+    // Load user's wishlist from backend
+    setTimeout(() => loadUserWishlist(), 500);
+    
+    // TODO: Optionally migrate local wishlist items to backend
+    // This would require additional backend endpoint to handle bulk additions
   };
 
   const clearCart = async () => {
@@ -394,7 +480,7 @@ export const StoreProvider = ({ children }) => {
           : Array.isArray(cart) 
             ? cart.reduce((sum, item) => sum + (item.quantity || item.qty || 0), 0)
             : (cart?.items || []).reduce((sum, item) => sum + (item.quantity || item.qty || 0), 0),
-        wishlistCount: wishlist.length,
+        wishlistCount: Array.isArray(wishlist) ? wishlist.length : 0,
       }}
     >
       {children}

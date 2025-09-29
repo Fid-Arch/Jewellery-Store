@@ -4,9 +4,44 @@ import { Heart, ShoppingCart, Star } from "lucide-react";
 import { useStore } from "../context/StoreContext";
 
 export default function ProductCard({ product }) {
-  const { addToCart, addToWishlist } = useStore();
+  const { addToCart, addToWishlist, removeFromWishlist, wishlist, user } = useStore();
   const [averageRating, setAverageRating] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
+  
+  // Local state to track wishlist status for immediate UI feedback
+  const [localIsInWishlist, setLocalIsInWishlist] = useState(false);
+  
+  // Use local state for immediate UI feedback
+  const isInWishlist = localIsInWishlist;
+  
+  useEffect(() => {
+    const isInList = wishlist?.some(item => {
+      const itemId = item.product_id || item._id || item.id;
+      const productId = product.product_id || product.id;
+      return itemId === productId;
+    });
+    setLocalIsInWishlist(isInList);
+  }, [wishlist, product]);
+
+  const handleWishlistToggle = async () => {
+    const productId = product.product_id || product.id;
+    
+    try {
+      if (isInWishlist) {
+        // Immediately update local state for instant feedback
+        setLocalIsInWishlist(false);
+        await removeFromWishlist(productId);
+      } else {
+        // Immediately update local state for instant feedback
+        setLocalIsInWishlist(true);
+        await addToWishlist(product);
+      }
+    } catch (error) {
+      console.error('Wishlist toggle error:', error);
+      // Revert local state on error
+      setLocalIsInWishlist(!isInWishlist);
+    }
+  };
 
   useEffect(() => {
     const fetchRating = async () => {
@@ -115,10 +150,16 @@ export default function ProductCard({ product }) {
             <ShoppingCart className="h-5 w-5" /> Add
           </button>
           <button
-            onClick={() => addToWishlist(product)}
-            className="flex items-center gap-1 px-3 py-2 border border-gray-300 rounded-md hover:bg-gold hover:text-white transition"
+            onClick={handleWishlistToggle}
+            className={`flex items-center gap-1 px-3 py-2 border rounded-md transition ${
+              isInWishlist 
+                ? 'border-red-500 bg-red-50 text-red-600 hover:bg-red-100' 
+                : 'border-gray-300 hover:bg-gold hover:text-white'
+            }`}
+            title={isInWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
           >
-            <Heart className="h-5 w-5" /> Save
+            <Heart className={`h-5 w-5 ${isInWishlist ? 'fill-current' : ''}`} />
+            {isInWishlist ? 'Saved' : 'Save'}
           </button>
         </div>
       </div>
