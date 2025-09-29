@@ -161,78 +161,93 @@ const Promotions = () => {
     { 
       accessor: 'name', 
       header: 'Promotion Details',
-      cell: (row) => (
-        <div>
-          <div className="font-semibold text-gray-900 dark:text-white">{row.name}</div>
-          <div className="text-sm text-gold-600 font-medium">{row.promotionCode}</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate max-w-xs">
-            {row.description || 'No description'}
+      cell: ({ row }) => {
+        if (!row) return <div className="text-gray-500">N/A</div>;
+        return (
+          <div>
+            <div className="font-semibold text-gray-900 dark:text-white">{row.name || 'N/A'}</div>
+            <div className="text-sm text-gold-600 font-medium">{row.promotionCode || 'N/A'}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate max-w-xs">
+              {row.description || 'No description'}
+            </div>
           </div>
-        </div>
-      )
+        );
+      }
     },
     { 
       accessor: 'discountRate', 
       header: 'Discount',
-      cell: (row) => (
-        <div className="text-center">
-          <div className="font-bold text-lg text-gold-600">
-            {row.discountType === 'percentage' ? `${row.discountRate}%` : `$${row.discountRate}`}
+      cell: ({ row }) => {
+        if (!row) return <div className="text-gray-500">N/A</div>;
+        return (
+          <div className="text-center">
+            <div className="font-bold text-lg text-gold-600">
+              {row.discountType === 'percentage' ? `${row.discountRate || 0}%` : `$${row.discountRate || 0}`}
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 capitalize">
+              {row.discountType?.replace('_', ' ') || 'N/A'}
+            </div>
           </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-            {row.discountType.replace('_', ' ')}
-          </div>
-        </div>
-      )
+        );
+      }
     },
     { 
       accessor: 'startDate', 
       header: 'Duration',
-      cell: (row) => (
-        <div className="text-sm">
-          <div className="text-gray-900 dark:text-white">
-            <strong>Start:</strong> {row.startDate ? new Date(row.startDate).toLocaleDateString() : 'N/A'}
+      cell: ({ row }) => {
+        if (!row) return <div className="text-gray-500">N/A</div>;
+        return (
+          <div className="text-sm">
+            <div className="text-gray-900 dark:text-white">
+              <strong>Start:</strong> {row.startDate ? new Date(row.startDate).toLocaleDateString() : 'N/A'}
+            </div>
+            <div className="text-gray-900 dark:text-white">
+              <strong>End:</strong> {row.endDate ? new Date(row.endDate).toLocaleDateString() : 'N/A'}
+            </div>
           </div>
-          <div className="text-gray-900 dark:text-white">
-            <strong>End:</strong> {row.endDate ? new Date(row.endDate).toLocaleDateString() : 'N/A'}
-          </div>
-        </div>
-      )
+        );
+      }
     },
     { 
       accessor: 'usageCount', 
       header: 'Usage Stats',
-      cell: (row) => (
-        <div className="text-center">
-          <div className="font-bold text-lg text-gray-900 dark:text-white">{row.usageCount || 0}</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            {row.usageLimit ? `of ${row.usageLimit} uses` : 'Unlimited'}
-          </div>
-          {row.minimumOrderValue > 0 && (
-            <div className="text-xs text-gold-600 mt-1">
-              Min: ${row.minimumOrderValue}
+      cell: ({ row }) => {
+        if (!row) return <div className="text-gray-500">N/A</div>;
+        return (
+          <div className="text-center">
+            <div className="font-bold text-lg text-gray-900 dark:text-white">{row.usageCount || 0}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              {row.usageLimit ? `of ${row.usageLimit} uses` : 'Unlimited'}
             </div>
-          )}
-        </div>
-      )
+            {row.minimumOrderValue > 0 && (
+              <div className="text-xs text-gold-600 mt-1">
+                Min: ${row.minimumOrderValue}
+              </div>
+            )}
+          </div>
+        );
+      }
     },
     { 
       accessor: 'isActive', 
       header: 'Status',
-      cell: (row) => (
-        <div className="flex justify-center">
-          <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${
-            row.isActive 
-              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
-              : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-          }`}>
-            <div className={`w-2 h-2 rounded-full mr-2 ${
-              row.isActive ? 'bg-green-500' : 'bg-red-500'
-            }`}></div>
-            {row.isActive ? 'Active' : 'Inactive'}
-          </span>
-        </div>
-      )
+      cell: ({ row }) => {
+        if (!row) return <div className="text-gray-500">N/A</div>;
+        return (
+          <div className="flex justify-center">
+            <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${
+              row.isActive 
+                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+                : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+            }`}>
+              <div className={`w-2 h-2 rounded-full mr-2 ${
+                row.isActive ? 'bg-green-500' : 'bg-red-500'
+              }`}></div>
+              {row.isActive ? 'Active' : 'Inactive'}
+            </span>
+          </div>
+        );
+      }
     }
   ];
 

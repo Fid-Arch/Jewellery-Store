@@ -31,7 +31,7 @@ const PromotionCodeInput = ({
 
     try {
       console.log('User object:', user);
-      console.log('User ID:', user?.user_id);
+      console.log('User ID:', user?.id);
       
       const validation = {
         promotionCode: promotionCode.toUpperCase(),

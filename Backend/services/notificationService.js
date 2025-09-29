@@ -208,6 +208,126 @@ class NotificationService {
             }
         });
     }
+
+    // Order status update notification
+    async sendOrderStatusUpdate(user, order, status, trackingNumber = null) {
+        if (!user.email_notifications) {
+            return { success: false, message: 'User email notifications disabled' };
+        }
+
+        const statusConfig = {
+            'processing': {
+                title: 'Order Processing',
+                color: '#17a2b8',
+                content: `
+                    <h3>Dear ${user.first_name},</h3>
+                    <p>Great news! Your order #${order.id} is now being processed by our team.</p>
+                    <p>We're carefully preparing your jewelry items and will update you once they're ready to ship.</p>
+                    <p><strong>Expected processing time:</strong> 1-2 business days</p>
+                `
+            },
+            'shipped': {
+                title: 'Order Shipped!',
+                color: '#28a745',
+                content: `
+                    <h3>Dear ${user.first_name},</h3>
+                    <p>Exciting news! Your order #${order.id} has been shipped and is on its way to you.</p>
+                    ${trackingNumber ? `<p><strong>Tracking Number:</strong> ${trackingNumber}</p>` : ''}
+                    <p>You can track your package using the tracking number above.</p>
+                `
+            },
+            'delivered': {
+                title: 'Order Delivered',
+                color: '#28a745',
+                content: `
+                    <h3>Dear ${user.first_name},</h3>
+                    <p>Your order #${order.id} has been successfully delivered!</p>
+                    <p>We hope you love your new jewelry pieces. If you have any questions or need assistance, please don't hesitate to contact us.</p>
+                `
+            },
+            'cancelled': {
+                title: 'Order Cancelled',
+                color: '#dc3545',
+                content: `
+                    <h3>Dear ${user.first_name},</h3>
+                    <p>We're sorry to inform you that your order #${order.id} has been cancelled.</p>
+                    <p>If you have any questions about this cancellation, please contact our customer service team.</p>
+                `
+            }
+        };
+
+        const config = statusConfig[status] || statusConfig['processing'];
+
+        return await this.sendEmail({
+            to: user.email,
+            subject: `Order #${order.id} - ${config.title}`,
+            template: 'order-status',
+            data: {
+                firstName: user.first_name,
+                orderId: order.id,
+                statusTitle: config.title,
+                statusColor: config.color,
+                content: config.content,
+                showTracking: status === 'shipped' && trackingNumber,
+                trackingNumber: trackingNumber
+            }
+        });
+    }
+
+    // Send SMS notification for order status
+    async sendOrderStatusSMS(user, order, status, trackingNumber = null) {
+        if (!user.sms_notifications || !user.phone) {
+            return { success: false, message: 'User SMS notifications disabled or no phone number' };
+        }
+
+        const statusMessages = {
+            'processing': `Your Goldmarks order #${order.id} is being processed. We'll update you when it ships!`,
+            'shipped': `Your Goldmarks order #${order.id} has shipped!${trackingNumber ? ` Track: ${trackingNumber}` : ''}`,
+            'delivered': `Your Goldmarks order #${order.id} has been delivered. Enjoy your jewelry!`,
+            'cancelled': `Your Goldmarks order #${order.id} has been cancelled. Contact us if you have questions.`
+        };
+
+        const message = statusMessages[status] || statusMessages['processing'];
+
+        return await this.sendSMS({
+            to: user.phone,
+            message: message
+        });
+    }
+
+    // Stock alert notification
+    async sendStockAlertEmail(user, product) {
+        if (!user.email_notifications) {
+            return { success: false, message: 'User email notifications disabled' };
+        }
+
+        return await this.sendEmail({
+            to: user.email,
+            subject: `Low Stock Alert: ${product.name}`,
+            template: 'stock-alert',
+            data: {
+                firstName: user.first_name,
+                productName: product.name,
+                currentStock: product.qty_in_stock,
+                productImage: product.image_url,
+                productUrl: `${process.env.FRONTEND_URL}/products/${product.product_id}`
+            }
+        });
+    }
+
+    // Send promotional email to multiple users
+    async sendBulkPromotionalEmail(users, promotion) {
+        const results = [];
+        
+        for (const user of users) {
+            if (user.marketing_emails) {
+                const result = await this.sendPromotionalEmail(user, promotion);
+                results.push({ userId: user.user_id, email: user.email, result });
+            }
+        }
+        
+        return results;
+    }
 }
 
 module.exports = new NotificationService();

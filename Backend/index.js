@@ -19,6 +19,7 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const shippingRoutes = require('./routes/shippingRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const stripeRoutes = require('./routes/stripeRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 // Import database connection (this will initialize the connection)
 require('./config/database');
@@ -62,6 +63,7 @@ app.use('/payments', paymentRoutes);
 app.use('/payments', stripeRoutes); // Stripe payment endpoints
 app.use('/shipping', shippingRoutes);
 app.use('/inventory', inventoryRoutes);
+app.use('/notifications', notificationRoutes);
 
 
 // TODO: Move remaining functions to appropriate controllers and routes

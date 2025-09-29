@@ -46,6 +46,15 @@ function Products() {
     initializeData();
   }, []); // Empty dependency array - only run once on mount
 
+  // Debug: Log products data
+  useEffect(() => {
+    console.log('Products data:', products);
+    console.log('Products length:', products?.length);
+    if (products?.length > 0) {
+      console.log('First product:', products[0]);
+    }
+  }, [products]);
+
   // Load categories
   const loadCategories = async () => {
     try {
@@ -246,7 +255,8 @@ function Products() {
             { 
               header: "Price Range", 
               accessor: "price_range",
-              cell: (row) => {
+              cell: ({ row }) => {
+                if (!row) return <div className="text-gray-500">N/A</div>;
                 if (row.min_price && row.max_price) {
                   return row.min_price === row.max_price 
                     ? `$${row.min_price}` 
@@ -258,7 +268,8 @@ function Products() {
             { 
               header: "Stock", 
               accessor: "stock_status",
-              cell: (row) => {
+              cell: ({ row }) => {
+                if (!row) return <div className="text-gray-500">N/A</div>;
                 const stock = row.variants_count || 0;
                 return (
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -276,40 +287,54 @@ function Products() {
             { 
               header: "Featured", 
               accessor: "is_featured",
-              cell: (row) => (
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  row.is_featured 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-gray-100 text-gray-800'
-                }`}>
-                  {row.is_featured ? 'Yes' : 'No'}
-                </span>
-              )
+              cell: ({ row }) => {
+                if (!row) return <div className="text-gray-500">N/A</div>;
+                return (
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    row.is_featured 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {row.is_featured ? 'Yes' : 'No'}
+                  </span>
+                );
+              }
             },
             { 
               header: "Created", 
               accessor: "created_at",
-              cell: (row) => new Date(row.created_at).toLocaleDateString()
+              cell: ({ row }) => {
+                if (!row) return <div className="text-gray-500">N/A</div>;
+                if (!row.created_at) return <div className="text-gray-500">N/A</div>;
+                try {
+                  return new Date(row.created_at).toLocaleDateString();
+                } catch (error) {
+                  return <div className="text-gray-500">Invalid Date</div>;
+                }
+              }
             },
             {
               header: "Actions",
               accessor: "actions",
-              cell: (row) => (
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => openModal(row)}
-                    className="text-yellow-600 hover:underline flex items-center gap-1"
-                  >
-                    <Edit size={16} /> Edit
-                  </button>
-                  <button
-                    onClick={() => handleDeleteProduct(row.product_id)}
-                    className="text-red-600 hover:underline flex items-center gap-1"
-                  >
-                    <Trash2 size={16} /> Delete
-                  </button>
-                </div>
-              ),
+              cell: ({ row }) => {
+                if (!row) return <div className="text-gray-500">N/A</div>;
+                return (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => openModal(row)}
+                      className="text-yellow-600 hover:underline flex items-center gap-1"
+                    >
+                      <Edit size={16} /> Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteProduct(row.product_id)}
+                      className="text-red-600 hover:underline flex items-center gap-1"
+                    >
+                      <Trash2 size={16} /> Delete
+                    </button>
+                  </div>
+                );
+              },
             },
           ]}
           data={Array.isArray(products) ? products.map((p) => ({ ...p, actions: "" })) : []}

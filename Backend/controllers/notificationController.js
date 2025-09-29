@@ -1,8 +1,5 @@
 const pool = require('../config/database');
-const NotificationService = require('../services/notificationService');
-
-// Initialize notification service
-const notificationService = new NotificationService();
+const notificationService = require('../services/notificationService');
 
 // Send welcome email to new user
 async function sendWelcomeNotification(req, res) {
@@ -299,10 +296,245 @@ async function getNotificationHistory(req, res) {
     }
 }
 
+// Send order status update notification
+async function sendOrderStatusUpdate(req, res) {
+    try {
+        const { orderId, status, trackingNumber } = req.body;
+        
+        // Get order and user details
+        const [orders] = await pool.query(`
+            SELECT o.*, u.firstName, u.lastName, u.email, u.phone, u.email_notifications, u.sms_notifications
+            FROM orders o
+            JOIN users u ON o.user_id = u.user_id
+            WHERE o.order_id = ?
+        `, [orderId]);
+        
+        if (orders.length === 0) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+        
+        const order = orders[0];
+        const user = {
+            first_name: order.firstName,
+            last_name: order.lastName,
+            email: order.email,
+            phone: order.phone,
+            email_notifications: order.email_notifications,
+            sms_notifications: order.sms_notifications
+        };
+        
+        const results = [];
+        
+        // Send email notification
+        if (user.email_notifications) {
+            const emailResult = await notificationService.sendOrderStatusUpdate(user, order, status, trackingNumber);
+            results.push({ type: 'email', result: emailResult });
+        }
+        
+        // Send SMS notification
+        if (user.sms_notifications && user.phone) {
+            const smsResult = await notificationService.sendOrderStatusSMS(user, order, status, trackingNumber);
+            results.push({ type: 'sms', result: smsResult });
+        }
+        
+        // Log notification
+        await pool.query(
+            'INSERT INTO notification_log (user_id, type, channel, status, content) VALUES (?, ?, ?, ?, ?)',
+            [order.user_id, 'order_status', 'email_sms', 'sent', `Order status update: ${status} for order #${orderId}`]
+        );
+        
+        res.status(200).json({
+            success: true,
+            message: 'Order status notification sent successfully',
+            results: results
+        });
+    } catch (error) {
+        console.error('Error sending order status update:', error);
+        res.status(500).json({ message: 'Error sending order status update' });
+    }
+}
+
+// Send stock alert notification
+async function sendStockAlert(req, res) {
+    try {
+        const { productId, userIds } = req.body;
+        
+        // Get product details
+        const [products] = await pool.query(
+            'SELECT * FROM products WHERE product_id = ?',
+            [productId]
+        );
+        
+        if (products.length === 0) {
+            return res.status(404).json({ message: 'Product not found' });
+        }
+        
+        const product = products[0];
+        
+        // Get users who want stock alerts
+        const [users] = await pool.query(`
+            SELECT user_id, firstName, lastName, email, email_notifications
+            FROM users 
+            WHERE user_id IN (${userIds.map(() => '?').join(',')}) 
+            AND email_notifications = 1
+        `, userIds);
+        
+        const results = [];
+        
+        for (const user of users) {
+            const userData = {
+                first_name: user.firstName,
+                last_name: user.lastName,
+                email: user.email,
+                email_notifications: user.email_notifications
+            };
+            
+            const result = await notificationService.sendStockAlertEmail(userData, product);
+            results.push({ userId: user.user_id, email: user.email, result });
+            
+            // Log notification
+            if (result.success) {
+                await pool.query(
+                    'INSERT INTO notification_log (user_id, type, channel, status, content) VALUES (?, ?, ?, ?, ?)',
+                    [user.user_id, 'stock_alert', 'email', 'sent', `Stock alert for ${product.name}`]
+                );
+            }
+        }
+        
+        res.status(200).json({
+            success: true,
+            message: `Stock alert sent to ${results.length} users`,
+            results: results
+        });
+    } catch (error) {
+        console.error('Error sending stock alert:', error);
+        res.status(500).json({ message: 'Error sending stock alert' });
+    }
+}
+
+// Subscribe to back-in-stock notifications
+async function subscribeBackInStock(req, res) {
+    try {
+        const userId = req.user.user_id;
+        const { productId, productItemId, emailNotification = true, smsNotification = false } = req.body;
+        
+        // Get user details
+        const [users] = await pool.query(
+            'SELECT email, phone FROM users WHERE user_id = ?',
+            [userId]
+        );
+        
+        if (users.length === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        
+        const user = users[0];
+        
+        // Check if already subscribed
+        const [existing] = await pool.query(
+            'SELECT id FROM stock_notifications WHERE user_id = ? AND product_id = ? AND product_item_id = ?',
+            [userId, productId, productItemId]
+        );
+        
+        if (existing.length > 0) {
+            return res.status(400).json({ message: 'Already subscribed to notifications for this product' });
+        }
+        
+        // Subscribe to notifications
+        await pool.query(
+            'INSERT INTO stock_notifications (user_id, product_id, product_item_id, email, phone, email_notification, sms_notification) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [userId, productId, productItemId, user.email, user.phone, emailNotification, smsNotification]
+        );
+        
+        res.status(200).json({
+            success: true,
+            message: 'Successfully subscribed to back-in-stock notifications'
+        });
+    } catch (error) {
+        console.error('Error subscribing to back-in-stock:', error);
+        res.status(500).json({ message: 'Error subscribing to notifications' });
+    }
+}
+
+// Unsubscribe from back-in-stock notifications
+async function unsubscribeBackInStock(req, res) {
+    try {
+        const userId = req.user.user_id;
+        const { productId } = req.params;
+        const { productItemId } = req.query;
+        
+        await pool.query(
+            'DELETE FROM stock_notifications WHERE user_id = ? AND product_id = ? AND product_item_id = ?',
+            [userId, productId, productItemId]
+        );
+        
+        res.status(200).json({
+            success: true,
+            message: 'Successfully unsubscribed from notifications'
+        });
+    } catch (error) {
+        console.error('Error unsubscribing from back-in-stock:', error);
+        res.status(500).json({ message: 'Error unsubscribing from notifications' });
+    }
+}
+
+// Trigger back-in-stock notifications (called when inventory is updated)
+async function triggerBackInStockNotifications(productId, productItemId = null) {
+    try {
+        // Get all active subscriptions for this product
+        const [subscriptions] = await pool.query(
+            'SELECT * FROM stock_notifications WHERE product_id = ? AND (product_item_id = ? OR product_item_id IS NULL) AND status = "active"',
+            [productId, productItemId]
+        );
+        
+        // Get product details
+        const [products] = await pool.query(
+            'SELECT * FROM products WHERE product_id = ?',
+            [productId]
+        );
+        
+        if (products.length === 0) {
+            console.log('Product not found for back-in-stock notification');
+            return;
+        }
+        
+        const product = products[0];
+        const results = [];
+        
+        for (const subscription of subscriptions) {
+            const user = {
+                first_name: subscription.email.split('@')[0], // Fallback name
+                email: subscription.email,
+                email_notifications: subscription.email_notification
+            };
+            
+            const result = await notificationService.sendBackInStockEmail(user, product);
+            results.push({ subscriptionId: subscription.id, result });
+            
+            // Mark as notified
+            await pool.query(
+                'UPDATE stock_notifications SET status = "notified", notified_at = NOW() WHERE id = ?',
+                [subscription.id]
+            );
+        }
+        
+        console.log(`Back-in-stock notifications sent to ${results.length} subscribers`);
+        return results;
+    } catch (error) {
+        console.error('Error triggering back-in-stock notifications:', error);
+        return [];
+    }
+}
+
 module.exports = {
     sendWelcomeNotification,
     sendOrderConfirmation,
     sendPromotionalNotification,
+    sendOrderStatusUpdate,
+    sendStockAlert,
+    subscribeBackInStock,
+    unsubscribeBackInStock,
+    triggerBackInStockNotifications,
     updateNotificationPreferences,
     getNotificationPreferences,
     getNotificationHistory

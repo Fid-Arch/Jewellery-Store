@@ -39,6 +39,8 @@ import Users from "./pages/admin/Users";
 import Promotions from "./pages/admin/Promotions";
 import Reports from "./pages/admin/Reports";
 import Settings from "./pages/admin/Settings";
+import HelpSupport from "./pages/admin/HelpSupport";
+import PromotionalEvents from "./pages/admin/PromotionalEvents";
 
 // Staff pages
 import StaffOrders from "./pages/staff/Orders";
@@ -157,6 +159,28 @@ function App() {
         <Route
           path="/admin/settings"
           element={user?.role.toLowerCase() === "admin" ? <Settings /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/admin/help-support"
+          element={user?.role.toLowerCase() === "admin" ? <HelpSupport /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/admin/promotional-events"
+          element={
+            user?.role?.toLowerCase() === "admin" || user?.roles_id === 1 ? 
+            <PromotionalEvents /> : 
+            <div className="p-6">
+              <h1 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h1>
+              <p className="text-gray-600 mb-4">You need admin privileges to access this page.</p>
+              <p className="text-sm text-gray-500">Current user role: {user?.role || user?.roles_id || 'Not logged in'}</p>
+              <button 
+                onClick={() => window.history.back()} 
+                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Go Back
+              </button>
+            </div>
+          }
         />
 
         {/* Staff routes */}

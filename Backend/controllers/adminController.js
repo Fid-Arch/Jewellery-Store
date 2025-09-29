@@ -93,9 +93,8 @@ async function getAllUsersAdmin(req, res) {
 
         let totalUsers = users.length;
         let totalPages = 1;
-        let countResult;
         try {
-            [countResult] = await pool.query(`
+            const [countResult] = await pool.query(`
                 SELECT COUNT(*) as total 
                 FROM users u
                 LEFT JOIN roles r ON u.roles_id = r.roles_id

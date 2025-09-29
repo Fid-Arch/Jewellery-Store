@@ -48,7 +48,7 @@ function DataTable({ columns, data, onEdit, onDelete, loading, emptyMessage = "N
                     key={j}
                     className="px-6 py-4 border-b border-gray-200 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300"
                   >
-                    {col.cell ? col.cell(row) : (row && row[col.accessor]) || 'N/A'}
+                    {col.cell ? col.cell({ row }) : (row && row[col.accessor]) || 'N/A'}
                   </td>
                 ))}
                 {hasActions && (

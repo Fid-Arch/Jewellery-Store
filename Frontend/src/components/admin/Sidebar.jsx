@@ -8,6 +8,8 @@ import {
   BarChart2,
   Settings,
   Tag,
+  HelpCircle,
+  Calendar,
 } from "lucide-react";
 
 const linkClass = ({ isActive }) =>
@@ -48,6 +50,12 @@ function Sidebar() {
         </NavLink>
         <NavLink to="/admin/settings" className={linkClass}>
           <Settings size={20} /> Settings
+        </NavLink>
+        <NavLink to="/admin/help-support" className={linkClass}>
+          <HelpCircle size={20} /> Help & Support
+        </NavLink>
+        <NavLink to="/admin/promotional-events" className={linkClass}>
+          <Calendar size={20} /> Promotional Events
         </NavLink>
       </nav>
     </aside>
