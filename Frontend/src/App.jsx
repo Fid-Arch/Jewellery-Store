@@ -14,6 +14,7 @@ import Home from "./pages/Home";
 import CustomerLogin from "./pages/customer/Login";
 import CustomerRegister from "./pages/customer/Register";
 import AdminRegister from "./pages/admin/Register";
+import StaffRegister from "./pages/staff/Register";
 import ExclusiveShowcase from "./pages/ExclusiveShowcase";
 import Cart from "./pages/customer/Cart";
 import Checkout from "./pages/customer/Checkout";
@@ -92,6 +93,10 @@ function App() {
         <Route
           path="/admin/register"
           element={user ? <Navigate to="/" /> : <AdminRegister />}
+        />
+        <Route
+          path="/staff/register"
+          element={user ? <Navigate to="/" /> : <StaffRegister />}
         />
 
         {/* Customer routes - Cart accessible to guests and customers */}
